@@ -11,6 +11,7 @@ export type TelegramUser = {
   id: number;
   is_bot?: boolean;
   first_name?: string;
+  last_name?: string;
 };
 
 export type TelegramMessage = {
@@ -67,4 +68,13 @@ export function getTextMessage(update: TelegramUpdate): TelegramMessage | null {
 
 export function isGroupChat(chat: TelegramChat): boolean {
   return chat.type === "group" || chat.type === "supergroup";
+}
+
+/** Private chat with the bot, or a group/supergroup (not channels). */
+export function isHuntChatAllowed(chat: TelegramChat): boolean {
+  return (
+    chat.type === "private" ||
+    chat.type === "group" ||
+    chat.type === "supergroup"
+  );
 }

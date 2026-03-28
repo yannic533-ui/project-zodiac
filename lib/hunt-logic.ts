@@ -118,10 +118,21 @@ function mapGroupRow(data: Record<string, unknown>): GroupRow {
   };
 }
 
+function huntDisplayName(msg: TelegramMessage): string {
+  if (msg.chat.type === "private") {
+    const parts = [msg.from?.first_name, msg.from?.last_name].filter(Boolean);
+    const full = parts.join(" ").trim();
+    if (full) return full;
+    if (msg.chat.username) return `@${msg.chat.username}`;
+    return "DM";
+  }
+  return msg.chat.title?.trim() || "Group";
+}
+
 async function createGroup(
   eventId: string,
   chatId: bigint,
-  title: string
+  displayName: string
 ): Promise<GroupRow> {
   const sb = createAdminClient();
   const { data, error } = await sb
@@ -129,7 +140,7 @@ async function createGroup(
     .insert({
       event_id: eventId,
       telegram_chat_id: chatId.toString(),
-      group_name: title || "Group",
+      group_name: displayName || "Group",
       state: "waiting" as GroupState,
     })
     .select("*")
@@ -157,11 +168,7 @@ export async function processHuntMessage(msg: TelegramMessage): Promise<void> {
       await sendTelegramMessage(chatId, closedMessage());
       return;
     }
-    group = await createGroup(
-      active[0].id,
-      chatId,
-      msg.chat.title ?? "Group"
-    );
+    group = await createGroup(active[0].id, chatId, huntDisplayName(msg));
     const langGuess = parseLanguageInput(text);
     if (!langGuess) {
       await sendTelegramMessage(chatId, ASK_LANG);

@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
 import { processHuntMessage } from "@/lib/hunt-logic";
-import {
-  getTextMessage,
-  isGroupChat,
-  parseUpdate,
-} from "@/lib/telegram";
+import { getTextMessage, isHuntChatAllowed, parseUpdate } from "@/lib/telegram";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,7 +29,7 @@ export async function POST(request: Request) {
 
   if (msg.from?.is_bot) return NextResponse.json({ ok: true });
 
-  if (!isGroupChat(msg.chat)) return NextResponse.json({ ok: true });
+  if (!isHuntChatAllowed(msg.chat)) return NextResponse.json({ ok: true });
 
   try {
     await processHuntMessage(msg);
