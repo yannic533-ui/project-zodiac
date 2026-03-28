@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0c0c0f;
+  --surface: #16161c;
+  --border: #2a2a32;
+  --text: #e8e6e3;
+  --muted: #8a8794;
+  --accent: #c9a227;
+}
+
+body {
+  color: var(--text);
+  background: var(--bg);
+}
