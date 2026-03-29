@@ -18,6 +18,16 @@ body {
   background: var(--swiss-bg);
 }
 
+.onb-shell {
+  height: 100dvh;
+}
+
+@supports not (height: 100dvh) {
+  .onb-shell {
+    height: calc(var(--vh, 1vh) * 100);
+  }
+}
+
 .onb-chat-body {
   -webkit-overflow-scrolling: touch;
 }

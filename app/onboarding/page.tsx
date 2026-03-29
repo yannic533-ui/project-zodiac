@@ -1210,7 +1210,6 @@ export default function OnboardingPage() {
   }
 
   const shellStyle: CSSProperties = {
-    height: "calc(var(--vh, 1vh) * 100)",
     maxWidth: 640,
     margin: "0 auto",
     overflow: "hidden",
@@ -1252,7 +1251,7 @@ export default function OnboardingPage() {
     flexShrink: 0,
     borderTop: "0.5px solid #e8e8e8",
     padding: "12px 16px",
-    paddingBottom: "max(12px, env(safe-area-inset-bottom))",
+    paddingBottom: "env(safe-area-inset-bottom, 12px)",
     background: "#fff",
   };
 

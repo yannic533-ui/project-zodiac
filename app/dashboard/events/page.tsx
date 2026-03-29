@@ -10,6 +10,7 @@ type EventRow = {
   date: string | null;
   route: string[];
   active: boolean;
+  invited_owner_emails?: string[];
 };
 
 const field =
@@ -23,6 +24,8 @@ export default function DashboardEventsPage() {
   const [name, setName] = useState("");
   const [date, setDate] = useState("");
   const [route, setRoute] = useState<string[]>([]);
+  const [inviteEmailsText, setInviteEmailsText] = useState("");
+  const [coOwnerBarIdsText, setCoOwnerBarIdsText] = useState("");
 
   const load = useCallback(async () => {
     const [er, br] = await Promise.all([
@@ -60,8 +63,38 @@ export default function DashboardEventsPage() {
     });
   }
 
+  function parseInviteEmails(text: string): string[] {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const line of text.split(/[\n,;]+/)) {
+      const t = line.trim().toLowerCase();
+      if (!t || seen.has(t)) continue;
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)) continue;
+      seen.add(t);
+      out.push(t);
+    }
+    return out;
+  }
+
+  function parseCoOwnerBarIds(text: string): string[] {
+    const uuidRe =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const part of text.split(/[,;\s]+/)) {
+      const t = part.trim();
+      if (!t || seen.has(t)) continue;
+      if (!uuidRe.test(t)) continue;
+      seen.add(t);
+      out.push(t);
+    }
+    return out;
+  }
+
   async function createEvent(e: React.FormEvent) {
     e.preventDefault();
+    const invited_owner_emails = parseInviteEmails(inviteEmailsText);
+    const co_owner_bar_ids = parseCoOwnerBarIds(coOwnerBarIdsText);
     const res = await fetch("/api/dashboard/events", {
       method: "POST",
       credentials: "include",
@@ -70,6 +103,8 @@ export default function DashboardEventsPage() {
         name,
         date: date ? new Date(date).toISOString() : null,
         route,
+        co_owner_bar_ids,
+        invited_owner_emails,
         active: false,
       }),
     });
@@ -77,6 +112,8 @@ export default function DashboardEventsPage() {
       setName("");
       setDate("");
       setRoute([]);
+      setInviteEmailsText("");
+      setCoOwnerBarIdsText("");
       await load();
     }
   }
@@ -204,6 +241,31 @@ export default function DashboardEventsPage() {
             ))}
           </ol>
         </div>
+        <div>
+          <div className="swiss-label mb-2" style={{ fontSize: 10 }}>
+            {t("dash_events_invite_emails_label")}
+          </div>
+          <textarea
+            className={field}
+            style={{ ...pad, minHeight: 72, resize: "vertical" as const }}
+            placeholder={t("dash_events_invite_emails_ph")}
+            value={inviteEmailsText}
+            onChange={(e) => setInviteEmailsText(e.target.value)}
+            rows={3}
+          />
+        </div>
+        <div>
+          <div className="swiss-label mb-2" style={{ fontSize: 10 }}>
+            {t("dash_events_co_bars_label")}
+          </div>
+          <input
+            className={field}
+            style={pad}
+            placeholder={t("dash_events_co_bars_ph")}
+            value={coOwnerBarIdsText}
+            onChange={(e) => setCoOwnerBarIdsText(e.target.value)}
+          />
+        </div>
         <button
           type="submit"
           className="bg-black text-white border-0"
@@ -227,6 +289,12 @@ export default function DashboardEventsPage() {
               <div className="mt-2" style={{ color: "#999999", fontSize: 12 }}>
                 {(ev.route ?? []).map((id) => barName(id)).join(" → ") || "—"}
               </div>
+              {ev.invited_owner_emails && ev.invited_owner_emails.length > 0 ? (
+                <div className="mt-1" style={{ color: "#999999", fontSize: 11 }}>
+                  {t("dash_events_invited_list")}:{" "}
+                  {ev.invited_owner_emails.join(", ")}
+                </div>
+              ) : null}
             </div>
             <div className="flex flex-wrap gap-4 items-center">
               {ev.active ? (

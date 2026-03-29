@@ -110,6 +110,11 @@ export const UI = {
     dash_events_up: "hoch",
     dash_events_down: "runter",
     dash_events_remove: "entfernen",
+    dash_events_invite_emails_label: "Co-Betreiber einladen (E-Mail, eine pro Zeile)",
+    dash_events_invite_emails_ph: "name@bar.ch",
+    dash_events_co_bars_label: "Deren Bar-IDs (UUID, kommagetrennt, optional)",
+    dash_events_co_bars_ph: "uuid-1, uuid-2",
+    dash_events_invited_list: "Eingeladen",
 
     // Dashboard live
     dash_live_title: "Live-Gruppen",
@@ -274,6 +279,11 @@ export const UI = {
     dash_events_up: "up",
     dash_events_down: "down",
     dash_events_remove: "remove",
+    dash_events_invite_emails_label: "Invite co-owners (email, one per line)",
+    dash_events_invite_emails_ph: "name@bar.com",
+    dash_events_co_bars_label: "Their bar IDs (UUID, comma-separated, optional)",
+    dash_events_co_bars_ph: "uuid-1, uuid-2",
+    dash_events_invited_list: "Invited",
 
     dash_live_title: "Live groups",
     dash_live_intro:
