@@ -13,6 +13,33 @@ export const dynamic = "force-dynamic";
 /** Web search requires Sonnet 4.5+; keep fixed for this route. */
 const ONBOARDING_RESPOND_MODEL = "claude-sonnet-4-5";
 
+/** Short replies; strict prompt caps length — keep generation small. */
+const DEFAULT_MAX_TOKENS = 512;
+
+function strictOnboardingSystem(locale: "de" | "en"): string {
+  const lang = locale === "de" ? "German" : "English";
+  return `You are a minimal, warm assistant helping a bar owner add their venue
+to a scavenger hunt platform.
+
+STRICT RULES — no exceptions:
+- Maximum 2 sentences per response. Never more.
+- No emojis. Ever.
+- No exclamation marks. Ever.
+- No words: perfekt, super, toll, fantastisch, wunderbar, freue, great, perfect, wonderful
+- No filler phrases like "Hier ist meine..." or "Ich sehe dass..."
+- Respond in ${lang} only
+
+For confirm phase — introduce what you found online, max 2 sentences:
+Good: "Stereo, Brauerstrasse 36 — Klipsch Soundsystem, Cocktail Bar seit 2009. Was sollen wir noch wissen?"
+Bad: "Perfekt! Ich freue mich, dass ihr dabei seid!"
+
+For qa phase — react to what user said, show riddle idea, ask one question:
+Good: "Die Originalfliesen aus den 70ern — guter Hinweis. *Rätsel: 'Was aus den 1970ern hat in dieser Bar überlebt?'* Noch etwas?"
+Bad: "Das ist fantastisch! Was möchtest du noch teilen?"
+
+Never write more than 2 sentences. Cut everything else.`;
+}
+
 function anthropicTimeoutMs(): number {
   const n = Number(process.env.ANTHROPIC_TIMEOUT_MS);
   return Number.isFinite(n) && n > 0 ? n : 60_000;
@@ -66,7 +93,8 @@ const bodySchema = z.object({
     )
     .min(1),
   system: z.string().optional(),
-  max_tokens: z.number().int().min(256).max(8192).optional(),
+  locale: z.enum(["de", "en"]).optional(),
+  max_tokens: z.number().int().min(64).max(8192).optional(),
 });
 
 export async function POST(request: Request) {
@@ -90,8 +118,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
 
-  const { messages, system, max_tokens } = parsed.data;
-  const maxTokens = max_tokens ?? 4096;
+  const { messages, system, max_tokens, locale: bodyLocale } = parsed.data;
+  const maxTokens = max_tokens ?? DEFAULT_MAX_TOKENS;
+  const locale: "de" | "en" = bodyLocale === "en" ? "en" : "de";
+  const strict = strictOnboardingSystem(locale);
+  const tail = system?.trim();
+  const mergedSystem = tail ? `${strict}\n\n---\n\n${tail}` : strict;
 
   const client = new Anthropic({
     apiKey: key,
@@ -108,7 +140,7 @@ export async function POST(request: Request) {
     model: ONBOARDING_RESPOND_MODEL,
     max_tokens: maxTokens,
     messages: apiMessages,
-    ...(system?.trim() ? { system: system.trim() } : {}),
+    system: mergedSystem,
   };
 
   let usedWebSearch = false;

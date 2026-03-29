@@ -165,17 +165,13 @@ function buildOnboardingRespondSystem(params: {
     locale,
     phase,
   } = params;
-  const lang = locale === "de" ? "German" : "English";
   const parts = [
-    "You help onboard a bar for a trivia/riddle game app.",
+    "Venue context (do not dump this as a block in your reply):",
     `Bar name: ${barName}`,
     `Address: ${barAddress}`,
     barDescription ? `Description: ${barDescription}` : null,
     barWebsite ? `Website: ${barWebsite}` : null,
-    `Locale: ${locale}. Reply only in ${lang}.`,
-    phase === "confirm"
-      ? `Phase: confirm. The user just confirmed this bar. Send a single opening message: briefly reflect light web research about this venue (atmosphere, what it is known for), then ask what else they want the game to know. Stay concise and warm.`
-      : `Phase: qa. Continue naturally from the prior messages. Short follow-up questions are fine. Do not paste the full bar address block again unless needed. One message only.`,
+    `This turn is phase: ${phase} (confirm = first message after bar confirmation; qa = follow-up turns).`,
   ];
   return parts.filter(Boolean).join("\n");
 }
@@ -225,7 +221,7 @@ async function postOnboardingRespond(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ messages, system }),
+    body: JSON.stringify({ messages, system, locale }),
   });
   const j = (await res.json()) as { text?: string; error?: string };
   if (!res.ok) {
@@ -370,6 +366,8 @@ export default function OnboardingPage() {
   const [editRiddle, setEditRiddle] = useState<Record<number, boolean>>({});
   const [progressPct, setProgressPct] = useState(0);
   const [firstQaMessageSent, setFirstQaMessageSent] = useState(false);
+  /** Suggestion chips only after opening QA agent message is shown */
+  const [qaReadyForSuggestions, setQaReadyForSuggestions] = useState(false);
 
   const searchAbortRef = useRef<AbortController | null>(null);
   const searchSeqRef = useRef(0);
@@ -648,6 +646,7 @@ export default function OnboardingPage() {
     setQaNotes([]);
     setFirstQaMessageSent(false);
     qaUserSendCountRef.current = 0;
+    setQaReadyForSuggestions(false);
     setInput("");
     resetTextareaHeight();
     setPhase("qa");
@@ -672,6 +671,7 @@ export default function OnboardingPage() {
           [{ id: uid(), role: "agent", kind: "text", text }],
           false
         );
+        setQaReadyForSuggestions(true);
         requestAnimationFrame(() => scrollToBottom(true));
       } catch {
         setTyping(false);
@@ -687,13 +687,21 @@ export default function OnboardingPage() {
           ],
           false
         );
+        setQaReadyForSuggestions(true);
         requestAnimationFrame(() => scrollToBottom(true));
       }
     })();
   }
 
   useEffect(() => {
-    if (phase !== "qa" || !place || chipsLoading) return;
+    if (
+      phase !== "qa" ||
+      !place ||
+      chipsLoading ||
+      !qaReadyForSuggestions
+    ) {
+      return;
+    }
     const items = pickThreeSuggestions(smartChips);
     const hasSuggestions = messagesRef.current.some(
       (m) => m.role === "ui" && m.kind === "suggestions"
@@ -703,7 +711,14 @@ export default function OnboardingPage() {
       [{ id: uid(), role: "ui", kind: "suggestions", items }],
       false
     );
-  }, [phase, place, smartChips, chipsLoading, appendMessages]);
+  }, [
+    phase,
+    place,
+    smartChips,
+    chipsLoading,
+    qaReadyForSuggestions,
+    appendMessages,
+  ]);
 
   function onConfirmOther() {
     setPlace(null);
@@ -1419,6 +1434,7 @@ export default function OnboardingPage() {
               }
 
               if (m.role === "ui" && m.kind === "confirm_bar") {
+                if (phase !== "confirm_bar") return null;
                 return (
                   <div
                     key={m.id}
@@ -1609,7 +1625,8 @@ export default function OnboardingPage() {
               </div>
             ) : null}
 
-            {typing || (chipsLoading && phase === "qa") ? (
+            {typing ||
+            (chipsLoading && phase === "qa" && qaReadyForSuggestions) ? (
               <div className="flex justify-start gap-1" aria-hidden>
                 <span className="onb-typing-dot onb-typing-dot--1" />
                 <span className="onb-typing-dot onb-typing-dot--2" />
