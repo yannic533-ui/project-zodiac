@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import Anthropic, { APIError } from "@anthropic-ai/sdk";
 import type { PlaceDetailsResult } from "@/lib/google-places";
+import {
+  anthropicWebSearchToolsParam,
+  concatAssistantText,
+} from "@/lib/anthropic-web-search";
 import type { OnboardingQaKey } from "@/lib/i18n/translations";
 
 export const runtime = "nodejs";
@@ -143,17 +147,18 @@ Example for a bar on Langstrasse:
       system:
         "You output ONLY a JSON array of exactly 3 strings. No markdown fences, no commentary.",
       messages: [{ role: "user", content: user }],
+      tools: anthropicWebSearchToolsParam() as never,
     });
 
-    const block = res.content.find((b) => b.type === "text");
-    if (!block || block.type !== "text") {
+    const combined = concatAssistantText(res.content).trim();
+    if (!combined) {
       return NextResponse.json(
         { error: "No text in model response" },
         { status: 502 }
       );
     }
 
-    const arr = extractJsonArray(block.text);
+    const arr = extractJsonArray(combined);
     if (!arr) {
       return NextResponse.json(
         { error: "Model JSON parse failed" },

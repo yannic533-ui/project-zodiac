@@ -84,6 +84,45 @@ function delay(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+function AnimatedAgentText({
+  text,
+  className,
+  style,
+  onRevealTick,
+}: {
+  text: string;
+  className?: string;
+  style?: CSSProperties;
+  onRevealTick?: () => void;
+}) {
+  const [visible, setVisible] = useState("");
+
+  useEffect(() => {
+    const words = text.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) {
+      setVisible("");
+      return;
+    }
+    setVisible(words[0]);
+    onRevealTick?.();
+    let i = 1;
+    if (i >= words.length) return;
+    const id = window.setInterval(() => {
+      setVisible(words.slice(0, i + 1).join(" "));
+      onRevealTick?.();
+      i++;
+      if (i >= words.length) window.clearInterval(id);
+    }, 30);
+    return () => window.clearInterval(id);
+  }, [text, onRevealTick]);
+
+  return (
+    <p className={className} style={style}>
+      {visible}
+    </p>
+  );
+}
+
 function isDoneMessage(raw: string, locale: "de" | "en"): boolean {
   const t = raw.trim().toLowerCase();
   if (locale === "de") {
@@ -250,6 +289,10 @@ export default function OnboardingPage() {
       behavior: smooth ? "smooth" : "auto",
     });
   }, []);
+
+  const bumpScroll = useCallback(() => {
+    requestAnimationFrame(() => scrollToBottom(true));
+  }, [scrollToBottom]);
 
   const appendMessages = useCallback(
     (next: ChatMessage[], fromUser = false) => {
@@ -568,12 +611,19 @@ export default function OnboardingPage() {
             false
           )
         );
-        const res = await fetch("/api/onboarding/generate-riddles", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ mode: "pack", place, qa }),
-        });
+        setTyping(true);
+        requestAnimationFrame(() => scrollToBottom(true));
+        let res: Response;
+        try {
+          res = await fetch("/api/onboarding/generate-riddles", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ mode: "pack", place, qa }),
+          });
+        } finally {
+          setTyping(false);
+        }
         const j = (await res.json()) as {
           riddles?: OnboardingRiddleDraft[];
           error?: string;
@@ -643,6 +693,8 @@ export default function OnboardingPage() {
     if (!place || !riddles) return;
     setErr("");
     setLoading(true);
+    setTyping(true);
+    requestAnimationFrame(() => scrollToBottom(true));
     try {
       const res = await fetch("/api/onboarding/generate-riddles", {
         method: "POST",
@@ -662,7 +714,6 @@ export default function OnboardingPage() {
       };
       if (!res.ok) {
         setErr(j.error ?? t("ob_err_regen"));
-        setLoading(false);
         return;
       }
       if (j.riddle) {
@@ -679,8 +730,10 @@ export default function OnboardingPage() {
       }
     } catch {
       setErr(t("ob_err_network"));
+    } finally {
+      setTyping(false);
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   async function completeSave() {
@@ -902,7 +955,8 @@ export default function OnboardingPage() {
               if (m.role === "agent" && m.kind === "text") {
                 return (
                   <div key={m.id} className="onb-msg-enter flex justify-start w-full">
-                    <p
+                    <AnimatedAgentText
+                      text={m.text}
                       className="max-w-[80%]"
                       style={{
                         fontSize: 15,
@@ -910,9 +964,8 @@ export default function OnboardingPage() {
                         color: "#000",
                         margin: 0,
                       }}
-                    >
-                      {m.text}
-                    </p>
+                      onRevealTick={bumpScroll}
+                    />
                   </div>
                 );
               }
@@ -921,38 +974,73 @@ export default function OnboardingPage() {
                 const src = photoUrl(m.place);
                 return (
                   <div key={m.id} className="onb-msg-enter flex justify-start w-full">
-                    <div className="max-w-[80%] space-y-2">
+                    <div className="max-w-[80%] w-full space-y-2">
                       {src ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={src}
-                          alt=""
-                          className="w-full max-h-48 object-cover"
-                          style={{
-                            border: "0.5px solid #e8e8e8",
-                          }}
-                        />
-                      ) : null}
-                      <p
-                        style={{
-                          fontSize: 15,
-                          lineHeight: 1.6,
-                          color: "#000",
-                          margin: 0,
-                        }}
-                      >
-                        {m.place.name}
-                      </p>
-                      <p
-                        style={{
-                          fontSize: 13,
-                          lineHeight: 1.5,
-                          color: "#666",
-                          margin: 0,
-                        }}
-                      >
-                        {m.place.formatted_address}
-                      </p>
+                        <div
+                          className="relative w-full overflow-hidden"
+                          style={{ border: "0.5px solid #e8e8e8" }}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={src}
+                            alt=""
+                            className="w-full max-h-48 object-cover block"
+                          />
+                          <div
+                            className="absolute inset-x-0 bottom-0 left-0 right-0 pointer-events-none"
+                            style={{
+                              padding: "16px 12px 10px",
+                              background:
+                                "linear-gradient(to top, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.2) 55%, transparent 100%)",
+                            }}
+                          >
+                            <p
+                              style={{
+                                color: "#fff",
+                                fontSize: 14,
+                                fontWeight: 500,
+                                margin: 0,
+                                lineHeight: 1.35,
+                              }}
+                            >
+                              {m.place.name}
+                            </p>
+                            <p
+                              style={{
+                                color: "rgba(255,255,255,0.7)",
+                                fontSize: 11,
+                                margin: "4px 0 0",
+                                lineHeight: 1.35,
+                              }}
+                            >
+                              {m.place.formatted_address}
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <p
+                            style={{
+                              fontSize: 15,
+                              lineHeight: 1.6,
+                              color: "#000",
+                              margin: 0,
+                            }}
+                          >
+                            {m.place.name}
+                          </p>
+                          <p
+                            style={{
+                              fontSize: 13,
+                              lineHeight: 1.5,
+                              color: "#666",
+                              margin: 0,
+                            }}
+                          >
+                            {m.place.formatted_address}
+                          </p>
+                        </>
+                      )}
                     </div>
                   </div>
                 );
@@ -1329,16 +1417,7 @@ export default function OnboardingPage() {
               </div>
             ) : null}
 
-            {chipsLoading && phase === "qa" ? (
-              <p
-                className="onb-msg-enter text-center"
-                style={{ fontSize: 13, color: "#666", margin: 0 }}
-              >
-                {t("common_loading")}
-              </p>
-            ) : null}
-
-            {typing ? (
+            {typing || (chipsLoading && phase === "qa") ? (
               <div className="flex justify-start gap-1" aria-hidden>
                 <span className="onb-typing-dot onb-typing-dot--1" />
                 <span className="onb-typing-dot onb-typing-dot--2" />

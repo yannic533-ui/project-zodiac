@@ -1,4 +1,8 @@
 import Anthropic, { APIError } from "@anthropic-ai/sdk";
+import {
+  anthropicWebSearchToolsParam,
+  concatAssistantText,
+} from "@/lib/anthropic-web-search";
 
 function anthropicModel(): string {
   return process.env.ANTHROPIC_MODEL?.trim() || "claude-3-5-haiku-latest";
@@ -95,6 +99,7 @@ Return ONLY this JSON shape:
       max_tokens: 1_200,
       system: SYSTEM,
       messages: [{ role: "user", content: user }],
+      tools: anthropicWebSearchToolsParam() as never,
     });
   } catch (e) {
     if (e instanceof APIError) {
@@ -103,12 +108,12 @@ Return ONLY this JSON shape:
     throw e;
   }
 
-  const block = res.content.find((b) => b.type === "text");
-  if (!block || block.type !== "text") {
+  const combined = concatAssistantText(res.content).trim();
+  if (!combined) {
     throw new Error("No text in model response");
   }
 
-  const parsed = extractJsonObject(block.text);
+  const parsed = extractJsonObject(combined);
   const arr = parsed?.riddles;
   if (!Array.isArray(arr) || arr.length < 3) {
     throw new Error("Invalid riddles JSON");
@@ -150,14 +155,15 @@ Return ONLY this JSON shape:
     max_tokens: 500,
     system: SYSTEM,
     messages: [{ role: "user", content: user }],
+    tools: anthropicWebSearchToolsParam() as never,
   });
 
-  const block = res.content.find((b) => b.type === "text");
-  if (!block || block.type !== "text") {
+  const combined = concatAssistantText(res.content).trim();
+  if (!combined) {
     throw new Error("No text in model response");
   }
 
-  const parsed = extractJsonObject(block.text);
+  const parsed = extractJsonObject(combined);
   if (!parsed) throw new Error("Invalid JSON");
   const r = normalizeRiddle(parsed, params.difficulty);
   if (!r) throw new Error("Invalid riddle");
