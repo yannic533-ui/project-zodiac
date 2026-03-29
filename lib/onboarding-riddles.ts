@@ -32,19 +32,38 @@ export type OnboardingRiddleDraft = {
   difficulty: 1 | 2 | 3;
 };
 
-const SYSTEM = `You help bar owners create short riddles for a real-world scavenger hunt.
-Players visit the bar in person; riddles must be solvable on site (no obscure trivia).
+const SYSTEM = `You help bar owners create navigation riddles for a real-world scavenger hunt.
 Return ONLY valid JSON, no markdown fences.
 
 Generate all riddles in German. Always. If the owner's notes explicitly ask for another language, follow that exception only for that request.
 
-CRITICAL: Never mention the bar's proper name in any riddle (question, hints, or keywords).
-The riddle must work as a mystery — players must discover the bar themselves.
-Instead of "Stereo opens at 18:00", write "Diese Bar öffnet um 18:00 — aber welche?"
-Reference the street, neighbourhood, interior details, atmosphere — never the venue name.
+CORE CONCEPT — players are NOT at the bar yet. They start somewhere else. Each riddle must LEAD them TO the venue using clues they can follow while walking or on a map. When they arrive and say the passphrase to the bartender, they get the next clue.
 
-Tone: grounded, clever, not corny. Hints nudge without giving away the answer.
-answer_keywords: 3–8 short phrases or words that count as correct (synonyms OK).`;
+WRONG: riddles that assume the player is already inside or already knows which bar it is (e.g. interior-only trivia, "what do you see at the bar", details only noticeable after entry).
+
+RIGHT: clues about LOCATION (street, neighbourhood, district, building, local history), clues about WHAT the place is without naming it, enough that someone can decide where to go next (e.g. "I need to head to Brauerstrasse 36").
+
+The riddle must NEVER reveal or assume:
+- The bar's proper name (in question, hints, or answer_keywords)
+- The exact full address dumped plainly in one sentence (indirect hints are OK: e.g. street theme + house number, district + number range)
+- Anything that only makes sense if you are already there
+
+The riddle MUST include:
+- Enough information to physically navigate toward the location
+- A street or neighbourhood reference (direct or indirect)
+- Something distinctive about the place (type, reputation, sound system, history of the area) so players can confirm they chose the right spot — without naming the venue
+
+Examples of CORRECT style (adapt facts from context only; do not copy if they do not match the real venue):
+EASY: "Diese Strasse trägt den Namen eines alten Handwerks. Geh zu Nummer 36 und klopf an."
+MEDIUM: "Im Kreis 4, wo früher Bier gebraut wurde, steht eine Bar die für ihre Soundanlage bekannt ist. Die Hausnummer ist eine gerade Zahl — die kleinste zwischen 35 und 40."
+HARD: "1900 roch diese Strasse nach Hopfen und Malz. Heute riecht sie nach Cocktails. Finde die Bar mit dem Klipsch-Sound im ehemaligen Industriequartier."
+
+ANTI-HALLUCINATION (riddles):
+Only use facts explicitly provided by the bar owner or found via web search in your tool results. Do not invent any details (years, owners, events, brands, history).
+If a fact is uncertain or not in context, make the riddle more general (reference street/neighbourhood/district) instead of specific unverified claims.
+
+Tone: grounded, clever, not corny. Hints nudge toward the route, not toward "you are already inside".
+answer_keywords: 3–8 short phrases or words that count as correct for WHERE to go (street, area, number, landmark — synonyms OK). Never put the bar's trade name as a keyword.`;
 
 function normalizeRiddle(
   raw: Record<string, unknown>,
@@ -154,7 +173,9 @@ export async function regenerateOnboardingRiddle(params: {
   });
 
   const user = `Bar context:\n${params.barContext}\n\nOther riddles already approved (do not copy):\n${params.keepSummary}\n\nRegenerate ONLY the riddle with difficulty ${params.difficulty} (${params.difficulty === 1 ? "easy" : params.difficulty === 2 ? "medium" : "hard"}).
-Output in German unless the owner notes explicitly request another language. Never use the bar's proper name in the riddle text.
+The riddle must LEAD players TO the bar from elsewhere (navigation clues), never assume they are already inside. Never use the bar's proper name.
+Only use facts from owner notes or verified web search; if unsure, use general street/neighbourhood clues.
+Output in German unless the owner notes explicitly request another language.
 
 Return ONLY this JSON shape:
 {"question":"...","answer_keywords":["..."],"hint_1":"...","hint_2":"...","difficulty":${params.difficulty}}`;
