@@ -44,11 +44,29 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 pr-24 bg-zinc-950">
-      <div className="w-full max-w-sm space-y-4 border border-zinc-800 rounded-lg p-6 bg-zinc-900/50">
-        <h1 className="text-lg text-zinc-200 font-medium">{t("login_title")}</h1>
-        <p className="text-sm text-zinc-500">{t("login_subtitle")}</p>
-        <form onSubmit={(e) => void onSubmit(e)} className="space-y-3">
+    <div
+      className="min-h-screen flex items-center justify-center bg-white text-black px-5"
+      style={{ paddingLeft: 20, paddingRight: 20 }}
+    >
+      <div className="w-full max-w-[360px] space-y-10">
+        <div
+          className="font-medium text-center"
+          style={{
+            fontSize: 11,
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            marginBottom: 48,
+          }}
+        >
+          SCHNUFFIS
+        </div>
+        <h1
+          className="text-black text-center"
+          style={{ fontSize: 20, fontWeight: 300, letterSpacing: "-0.02em" }}
+        >
+          {t("login_title")}
+        </h1>
+        <form onSubmit={(e) => void onSubmit(e)} className="space-y-6">
           <input
             type="email"
             autoComplete="email"
@@ -56,21 +74,30 @@ function LoginForm() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder={t("login_placeholder_email")}
-            className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+            className="w-full bg-white swiss-border-black outline-none"
+            style={{
+              padding: "12px 16px",
+              fontSize: 14,
+              fontWeight: 300,
+            }}
           />
           {err === "auth" ? (
-            <p className="text-sm text-red-400">{t("login_error_auth")}</p>
+            <p className="swiss-body-sm" style={{ color: "#999999" }}>
+              {t("login_error_auth")}
+            </p>
           ) : null}
           {err === "profile" ? (
-            <p className="text-sm text-red-400">{t("login_error_profile")}</p>
+            <p className="swiss-body-sm" style={{ color: "#999999" }}>
+              {t("login_error_profile")}
+            </p>
           ) : null}
           {feedback ? (
             <p
-              className={
-                feedback.kind === "success"
-                  ? "text-sm text-emerald-400/90"
-                  : "text-sm text-red-400"
-              }
+              className="swiss-body-sm"
+              style={{
+                color: "#999999",
+                fontWeight: feedback.kind === "success" ? 500 : 300,
+              }}
             >
               {feedback.text}
             </p>
@@ -78,13 +105,14 @@ function LoginForm() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded bg-amber-600/90 hover:bg-amber-500 text-zinc-950 py-2 text-sm font-medium disabled:opacity-50"
+            className="w-full bg-black text-white border-0 disabled:opacity-50"
+            style={{ padding: "14px", fontSize: 14, fontWeight: 500 }}
           >
             {loading ? t("common_loading") : t("login_btn_submit")}
           </button>
         </form>
-        <p className="text-xs text-zinc-600">
-          <Link href="/" className="text-zinc-500 hover:text-zinc-300">
+        <p className="text-center swiss-body-sm" style={{ color: "#cccccc", fontSize: 11 }}>
+          <Link href="/" className="hover:opacity-70" style={{ color: "#999999" }}>
             {t("login_back_home")}
           </Link>
         </p>
@@ -94,11 +122,15 @@ function LoginForm() {
 }
 
 export default function LoginPage() {
+  const { t } = useI18n();
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-zinc-500 text-sm pr-24">
-          …
+        <div
+          className="min-h-screen flex items-center justify-center bg-white text-black swiss-body-sm"
+          style={{ color: "#999999" }}
+        >
+          {t("common_loading")}
         </div>
       }
     >

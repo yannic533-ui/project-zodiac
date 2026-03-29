@@ -27,32 +27,36 @@ export default function AdminMessagePage() {
 
   return (
     <div className="space-y-6 max-w-lg">
-      <h1 className="text-xl text-zinc-100 font-medium">Manual message</h1>
-      <p className="text-sm text-zinc-500">
+      <p className="swiss-body-sm" style={{ color: "#999999" }}>
         Send any text to a Telegram chat the bot is in. Use the numeric chat ID
         (negative for groups).
       </p>
-      <form onSubmit={send} className="space-y-3">
+      <form onSubmit={send} className="space-y-6">
         <input
-          className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm font-mono"
+          className="w-full bg-white swiss-border outline-none font-mono swiss-body-sm"
+          style={{ padding: "12px 16px" }}
           placeholder="telegram_chat_id"
           value={telegram_chat_id}
           onChange={(e) => setChat(e.target.value)}
           required
         />
         <textarea
-          className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm min-h-[120px]"
+          className="w-full bg-white swiss-border outline-none swiss-body-sm min-h-[120px]"
+          style={{ padding: "12px 16px" }}
           placeholder="Message"
           value={text}
           onChange={(e) => setText(e.target.value)}
           required
         />
         {status ? (
-          <p className="text-sm text-zinc-400">{status}</p>
+          <p className="swiss-body-sm" style={{ color: "#999999" }}>
+            {status}
+          </p>
         ) : null}
         <button
           type="submit"
-          className="rounded bg-amber-600/90 text-zinc-950 px-4 py-2 text-sm font-medium"
+          className="bg-black text-white border-0"
+          style={{ padding: "14px 24px", fontSize: 14, fontWeight: 500 }}
         >
           Send
         </button>

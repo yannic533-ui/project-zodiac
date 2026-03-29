@@ -14,6 +14,10 @@ type Riddle = {
   hint_2: string;
 };
 
+const field =
+  "w-full bg-white swiss-border outline-none swiss-body-sm text-black";
+const pad = { padding: "12px 16px" as const };
+
 export default function DashboardRiddlesPage() {
   const { t } = useI18n();
   const [bars, setBars] = useState<Bar[]>([]);
@@ -92,14 +96,18 @@ export default function DashboardRiddlesPage() {
   const barName = (id: string) => bars.find((b) => b.id === id)?.name ?? id;
 
   return (
-    <div className="space-y-8">
-      <h1 className="text-xl text-zinc-100 font-medium">{t("dash_riddles_title")}</h1>
-      <p className="text-sm text-zinc-500">{t("dash_riddles_intro")}</p>
+    <div className="space-y-10">
+      <p className="swiss-body-sm max-w-xl" style={{ color: "#999999" }}>
+        {t("dash_riddles_intro")}
+      </p>
 
-      <div className="flex flex-wrap gap-3 items-center">
-        <label className="text-sm text-zinc-400">{t("dash_riddles_bar_label")}</label>
+      <div className="flex flex-wrap gap-4 items-center">
+        <label className="swiss-label" style={{ fontSize: 10 }}>
+          {t("dash_riddles_bar_label")}
+        </label>
         <select
-          className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+          className={`${field} max-w-xs`}
+          style={pad}
           value={barId}
           onChange={(e) => setBarId(e.target.value)}
         >
@@ -113,26 +121,34 @@ export default function DashboardRiddlesPage() {
 
       <form
         onSubmit={addRiddle}
-        className="space-y-3 max-w-xl border border-zinc-800 rounded-lg p-4 bg-zinc-900/40"
+        className="space-y-6 max-w-xl swiss-border bg-[#fafafa]"
+        style={{ padding: 24 }}
       >
-        <h2 className="text-sm text-zinc-400">{t("dash_riddles_add_title")}</h2>
+        <h2 className="swiss-label" style={{ fontSize: 10 }}>
+          {t("dash_riddles_add_title")}
+        </h2>
         <textarea
-          className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm min-h-[64px] text-zinc-100"
+          className={`${field} min-h-[64px]`}
+          style={pad}
           placeholder={t("dash_riddles_q_ph")}
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           required
         />
         <input
-          className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+          className={field}
+          style={pad}
           placeholder={t("dash_riddles_kw_ph")}
           value={keywords}
           onChange={(e) => setKeywords(e.target.value)}
         />
-        <div className="flex gap-2 items-center">
-          <label className="text-xs text-zinc-500">{t("dash_riddles_diff_label")}</label>
+        <div className="flex gap-4 items-center">
+          <label className="swiss-label" style={{ fontSize: 10 }}>
+            {t("dash_riddles_diff_label")}
+          </label>
           <select
-            className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm text-zinc-100"
+            className={field}
+            style={{ ...pad, padding: "8px 12px" }}
             value={difficulty}
             onChange={(e) => setDifficulty(Number(e.target.value))}
           >
@@ -142,45 +158,50 @@ export default function DashboardRiddlesPage() {
           </select>
         </div>
         <input
-          className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+          className={field}
+          style={pad}
           placeholder={t("dash_riddles_hint1_ph")}
           value={h1}
           onChange={(e) => setH1(e.target.value)}
         />
         <input
-          className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+          className={field}
+          style={pad}
           placeholder={t("dash_riddles_hint2_ph")}
           value={h2}
           onChange={(e) => setH2(e.target.value)}
         />
         <button
           type="submit"
-          className="rounded bg-amber-600/90 text-zinc-950 px-4 py-2 text-sm font-medium"
+          className="bg-black text-white border-0"
+          style={{ padding: "14px 24px", fontSize: 14, fontWeight: 500 }}
         >
           {t("dash_riddles_add_btn")}
         </button>
       </form>
 
-      <ul className="space-y-3">
+      <ul className="space-y-0 max-w-4xl">
         {riddles.map((r) => (
           <li
             key={r.id}
-            className="border border-zinc-800 rounded-lg p-3 bg-zinc-900/30 text-sm"
+            className="swiss-border-b py-6"
+            style={{ borderColor: "#e8e8e8" }}
           >
-            <div className="text-xs text-zinc-500 mb-1">
+            <div className="swiss-label mb-2" style={{ fontSize: 10 }}>
               {t("dash_riddles_list_meta", {
                 bar: barName(r.bar_id),
                 n: r.difficulty,
               })}
             </div>
-            <div className="text-zinc-200">{r.question}</div>
-            <div className="text-xs text-zinc-500 mt-1">
+            <div className="swiss-body-sm text-black">{r.question}</div>
+            <div className="swiss-body-sm mt-2" style={{ color: "#999999", fontSize: 12 }}>
               {t("dash_riddles_kw_label")}{" "}
               {r.answer_keywords.join(", ") || "—"}
             </div>
             <button
               type="button"
-              className="text-xs text-red-400 mt-2"
+              className="mt-4 bg-transparent border-0"
+              style={{ fontSize: 11, color: "#999999" }}
               onClick={() => void removeRiddle(r.id)}
             >
               {t("dash_riddles_delete")}

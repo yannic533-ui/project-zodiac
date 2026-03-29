@@ -49,13 +49,14 @@ export default function AdminPassphrasesPage() {
   }, [loadPass]);
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-xl text-zinc-100 font-medium">Passphrase log</h1>
-
+    <div className="space-y-10">
       <div className="max-w-md">
-        <label className="text-xs text-zinc-500 block mb-1">Event</label>
+        <label className="swiss-label block mb-2" style={{ fontSize: 10 }}>
+          Event
+        </label>
         <select
-          className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+          className="w-full bg-white swiss-border outline-none swiss-body-sm"
+          style={{ padding: "12px 16px" }}
           value={eventId}
           onChange={(e) => setEventId(e.target.value)}
         >
@@ -67,30 +68,38 @@ export default function AdminPassphrasesPage() {
         </select>
       </div>
 
-      <div className="overflow-x-auto rounded border border-zinc-800">
-        <table className="w-full text-sm">
-          <thead className="bg-zinc-900 text-zinc-400 text-left">
-            <tr>
-              <th className="p-2">When</th>
-              <th className="p-2">Bar</th>
-              <th className="p-2">Code</th>
+      <div className="swiss-border overflow-x-auto">
+        <table className="w-full text-left border-collapse swiss-body-sm">
+          <thead>
+            <tr className="swiss-border-b bg-[#fafafa]">
+              <th className="swiss-label py-3 px-3 font-medium" style={{ fontSize: 10 }}>
+                When
+              </th>
+              <th className="swiss-label py-3 px-3 font-medium" style={{ fontSize: 10 }}>
+                Bar
+              </th>
+              <th className="swiss-label py-3 px-3 font-medium" style={{ fontSize: 10 }}>
+                Code
+              </th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={3} className="p-4 text-zinc-500">
+                <td colSpan={3} className="py-6 px-3" style={{ color: "#999999" }}>
                   No passphrases for this event.
                 </td>
               </tr>
             ) : (
               rows.map((r) => (
-                <tr key={r.id} className="border-t border-zinc-800">
-                  <td className="p-2 text-zinc-400 whitespace-nowrap">
+                <tr key={r.id} className="swiss-border-b">
+                  <td className="py-3 px-3 whitespace-nowrap" style={{ color: "#999999" }}>
                     {new Date(r.generated_at).toLocaleString()}
                   </td>
-                  <td className="p-2 text-zinc-300">{r.bar_name ?? "—"}</td>
-                  <td className="p-2 text-zinc-100 font-mono">{r.code}</td>
+                  <td className="py-3 px-3" style={{ color: "#999999" }}>
+                    {r.bar_name ?? "—"}
+                  </td>
+                  <td className="py-3 px-3 font-mono text-black">{r.code}</td>
                 </tr>
               ))
             )}

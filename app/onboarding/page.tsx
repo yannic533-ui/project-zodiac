@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   extractPlaceIdFromInput,
-  placePhotoProxyUrl,
   type PlaceDetailsResult,
 } from "@/lib/google-places";
 import type { OnboardingQa } from "@/lib/onboarding-context";
@@ -26,10 +25,13 @@ const QA_KEYS: { key: OnboardingQaKey; label: MessageKey }[] = [
   { key: "insider", label: "ob_q_insider" },
 ];
 
+const TELEGRAM_LINK =
+  process.env.NEXT_PUBLIC_TELEGRAM_BOT_LINK ?? "https://t.me/";
+
 export default function OnboardingPage() {
   const router = useRouter();
   const { t, locale } = useI18n();
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [searchBusy, setSearchBusy] = useState(false);
@@ -57,6 +59,10 @@ export default function OnboardingPage() {
     string[]
   > | null>(null);
   const [chipsLoading, setChipsLoading] = useState(false);
+  const [chatIdx, setChatIdx] = useState(0);
+  const [chatDraft, setChatDraft] = useState("");
+  const [chatLog, setChatLog] = useState<{ role: "user"; text: string }[]>([]);
+  const [editRiddle, setEditRiddle] = useState<Record<number, boolean>>({});
 
   const chips = QA_CHIPS[locale];
 
@@ -73,14 +79,8 @@ export default function OnboardingPage() {
     };
   }, [place, editName, editAddress, editWebsite, editDesc]);
 
-  const photoUrl = useMemo(() => {
-    const ref = place?.photos?.[0]?.photo_reference;
-    if (!ref) return null;
-    return placePhotoProxyUrl(ref, 640);
-  }, [place]);
-
-  const stepLabel =
-    step === 1 ? t("ob_step1_label") : step === 2 ? t("ob_step2_label") : t("ob_step3_label");
+  const progressPct =
+    step === 1 ? 25 : step === 2 ? 50 : step === 3 ? 75 : 100;
 
   function applyPlaceDetails(p: PlaceDetailsResult) {
     setPlace(p);
@@ -163,7 +163,7 @@ export default function OnboardingPage() {
       searchAbortRef.current?.abort();
       searchAbortRef.current = null;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- t() omitted to avoid refetch loops on context churn
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, locale]);
 
   useEffect(() => {
@@ -203,6 +203,24 @@ export default function OnboardingPage() {
     };
   }, [step, placeForSuggestions, locale]);
 
+  useEffect(() => {
+    if (step === 2) {
+      setChatIdx(0);
+      setChatDraft("");
+      setChatLog([]);
+    }
+  }, [step]);
+
+  const currentKey = QA_KEYS[chatIdx]?.key;
+  const rowChipsForChat = useMemo(() => {
+    if (!currentKey) return [];
+    const row =
+      smartChips?.[currentKey] && smartChips[currentKey].length > 0
+        ? smartChips[currentKey]
+        : chips[currentKey];
+    return row.slice(0, 3);
+  }, [currentKey, smartChips, chips]);
+
   async function pickCandidate(c: Candidate) {
     setErr("");
     setLoading(true);
@@ -224,6 +242,24 @@ export default function OnboardingPage() {
       setErr(t("ob_err_network"));
     }
     setLoading(false);
+  }
+
+  function advanceChat() {
+    if (chatIdx >= QA_KEYS.length) return;
+    const k = QA_KEYS[chatIdx].key;
+    const text = chatDraft.trim();
+    setQa((q) => ({ ...q, [k]: text || undefined }));
+    if (text) setChatLog((l) => [...l, { role: "user", text }]);
+    setChatDraft("");
+    setChatIdx((i) => i + 1);
+  }
+
+  function skipChat() {
+    if (chatIdx >= QA_KEYS.length) return;
+    const k = QA_KEYS[chatIdx].key;
+    setQa((q) => ({ ...q, [k]: undefined }));
+    setChatDraft("");
+    setChatIdx((i) => i + 1);
   }
 
   async function generatePack() {
@@ -318,14 +354,13 @@ export default function OnboardingPage() {
           riddles,
         }),
       });
-      const j = (await res.json()) as { error?: string };
+      const j = (await res.json()) as { error?: string; ok?: boolean };
       if (!res.ok) {
         setErr(j.error ?? t("ob_err_save"));
         setSaving(false);
         return;
       }
-      router.push("/dashboard");
-      router.refresh();
+      setStep(4);
     } catch {
       setErr(t("ob_err_network"));
     }
@@ -338,30 +373,229 @@ export default function OnboardingPage() {
     return t("ob_diff_hard");
   }
 
+  const skipLabel =
+    locale === "de"
+      ? "Überspringen — nur Google Maps verwenden"
+      : "Skip — use Google Maps info only";
+
+  if (step === 2 && place) {
+    return (
+      <div
+        className="fixed inset-0 z-40 flex flex-col bg-white text-black"
+        style={{ fontFamily: "inherit" }}
+      >
+        <div className="w-full shrink-0 bg-[#e8e8e8]" style={{ height: 1 }} aria-hidden>
+          <div className="bg-black h-full" style={{ width: `${progressPct}%` }} />
+        </div>
+        <div className="swiss-border-b px-4 py-3 shrink-0" style={{ padding: "12px 16px" }}>
+          <div className="swiss-body-sm text-black">
+            {editName || place.name}
+          </div>
+          <div className="swiss-body-sm" style={{ color: "#999" }}>
+            {editAddress || place.formatted_address}
+          </div>
+        </div>
+        <div
+          className="flex-1 overflow-y-auto min-h-0"
+          style={{ padding: "20px 16px" }}
+        >
+          <p
+            className="text-center swiss-body-sm mb-8"
+            style={{ color: "#999", fontSize: 12 }}
+          >
+            {locale === "de"
+              ? "Was sollen wir über deine Bar wissen?"
+              : "What should we know about your bar?"}
+          </p>
+          {chatLog.map((m, i) => (
+            <p
+              key={`${i}-${m.text.slice(0, 20)}`}
+              className="swiss-body-sm mb-4 text-black"
+            >
+              {m.text}
+            </p>
+          ))}
+          {chipsLoading ? (
+            <p className="text-center swiss-body-sm" style={{ color: "#999" }}>
+              {t("common_loading")}
+            </p>
+          ) : null}
+          {chatIdx < QA_KEYS.length ? (
+            <div className="flex flex-col gap-2 max-w-lg mx-auto">
+              {rowChipsForChat.map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  className="text-left bg-white swiss-border hover:border-black swiss-body-sm transition-colors"
+                  style={{ padding: "12px 16px" }}
+                  onClick={() => setChatDraft(chip)}
+                >
+                  {chip}
+                </button>
+              ))}
+              <button
+                type="button"
+                className="text-left bg-white swiss-border swiss-body-sm hover:border-black"
+                style={{ padding: "12px 16px", fontSize: 12, color: "#999" }}
+                onClick={() => skipChat()}
+              >
+                {skipLabel}
+              </button>
+            </div>
+          ) : (
+            <div className="max-w-lg mx-auto pt-6">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => void generatePack()}
+                className="w-full bg-black text-white swiss-body border-0"
+                style={{
+                  padding: "14px",
+                  fontSize: 14,
+                  fontWeight: 500,
+                }}
+              >
+                {loading ? t("common_loading") : t("ob_generate")}
+              </button>
+            </div>
+          )}
+        </div>
+        {chatIdx < QA_KEYS.length ? (
+          <div
+            className="shrink-0 swiss-border-t bg-white"
+            style={{ padding: "12px 16px" }}
+          >
+            <div
+              className="flex items-end gap-2 swiss-border-black"
+              style={{ padding: "10px 14px", gap: 8 }}
+            >
+              <textarea
+                className="flex-1 min-h-[24px] max-h-32 bg-transparent border-0 outline-none resize-none swiss-body-sm"
+                rows={2}
+                value={chatDraft}
+                onChange={(e) => setChatDraft(e.target.value)}
+                placeholder=""
+              />
+              <button
+                type="button"
+                onClick={() => advanceChat()}
+                className="shrink-0 flex items-center justify-center bg-black text-white border-0"
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: "50%",
+                  fontSize: 12,
+                  fontWeight: 500,
+                }}
+                aria-label="Send"
+              >
+                ↑
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (step === 4) {
+    return (
+      <div
+        className="min-h-screen bg-white text-black flex flex-col items-center justify-center px-5"
+        style={{ paddingTop: 40, paddingBottom: 40 }}
+      >
+        <div className="w-full max-w-[480px] space-y-10 text-center">
+          <div style={{ fontSize: 24 }} aria-hidden>
+            ✓
+          </div>
+          <h1
+            className="text-black"
+            style={{
+              fontSize: 20,
+              fontWeight: 300,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            {locale === "de" ? "Bar angelegt" : "Bar created"}
+          </h1>
+          <div
+            className="text-left font-mono swiss-border bg-[#fafafa]"
+            style={{
+              fontSize: 12,
+              padding: "12px 16px",
+              wordBreak: "break-all",
+            }}
+          >
+            {TELEGRAM_LINK}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              router.push("/dashboard");
+              router.refresh();
+            }}
+            className="w-full bg-black text-white border-0"
+            style={{ padding: "14px", fontSize: 14, fontWeight: 500 }}
+          >
+            {locale === "de" ? "Zum Dashboard" : "Go to dashboard"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 px-4 py-10 pr-20">
-      <div className="max-w-xl mx-auto space-y-8">
-        <div className="flex items-center justify-between gap-4">
-          <h1 className="text-xl font-medium text-amber-500/90">{t("ob_title")}</h1>
+    <div className="min-h-screen bg-white text-black px-5 py-10">
+      <div
+        className="fixed top-0 left-0 right-0 h-px bg-[#e8e8e8] z-50 pointer-events-none"
+        aria-hidden
+      >
+        <div
+          className="h-full bg-black"
+          style={{ width: `${progressPct}%` }}
+        />
+      </div>
+
+      <div className="max-w-[480px] mx-auto pt-4">
+        <div className="flex justify-between items-center gap-4 mb-10">
+          <h1
+            className="text-black"
+            style={{
+              fontSize: 24,
+              fontWeight: 300,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            {t("ob_title")}
+          </h1>
           <Link
             href="/dashboard"
-            className="text-sm text-zinc-500 hover:text-zinc-300"
+            className="swiss-body-sm hover:opacity-70"
+            style={{ color: "#999" }}
           >
             {t("ob_dashboard_link")}
           </Link>
         </div>
-        <p className="text-sm text-zinc-500">
-          {t("ob_step", { step: String(step), label: stepLabel })}
-        </p>
 
-        {err ? <p className="text-sm text-red-400">{err}</p> : null}
+        {err ? (
+          <p className="swiss-body-sm mb-4" style={{ color: "#999" }}>
+            {err}
+          </p>
+        ) : null}
 
         {step === 1 ? (
-          <div className="space-y-4">
-            <label className="block text-sm text-zinc-400">{t("ob_q1_label")}</label>
+          <div className="flex flex-col gap-6">
+            <label className="swiss-label block" style={{ fontSize: 11 }}>
+              {t("ob_q1_label")}
+            </label>
             <div className="relative">
               <input
-                className="w-full rounded-lg border border-zinc-700/80 bg-zinc-900/80 px-3 py-2.5 text-sm shadow-inner outline-none ring-amber-500/20 focus:border-amber-600/50 focus:ring-2"
+                className="w-full bg-white swiss-border-black outline-none"
+                style={{
+                  padding: "12px 16px",
+                  fontSize: 14,
+                  fontWeight: 300,
+                }}
                 value={query}
                 onChange={(e) => {
                   const v = e.target.value;
@@ -381,31 +615,48 @@ export default function OnboardingPage() {
                 autoComplete="off"
               />
               {searchBusy ? (
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500">
+                <span
+                  className="absolute right-4 top-1/2 -translate-y-1/2 swiss-body-sm"
+                  style={{ color: "#999", fontSize: 12 }}
+                >
                   {t("common_loading")}
                 </span>
               ) : null}
 
               {searchMenuOpen && searchPanel ? (
-                <ul className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-zinc-700/80 bg-zinc-900 py-1 shadow-xl shadow-black/40">
+                <ul
+                  className="absolute z-20 mt-0 w-full max-h-64 overflow-auto bg-white swiss-border"
+                  style={{ borderTop: "none" }}
+                >
                   {searchPanel.mode === "list" &&
                   searchPanel.candidates.length === 0 ? (
-                    <li className="px-3 py-2 text-xs text-zinc-500">
+                    <li
+                      className="swiss-body-sm"
+                      style={{ padding: "12px 16px", color: "#999" }}
+                    >
                       {locale === "de" ? "Keine Treffer." : "No results."}
                     </li>
                   ) : null}
                   {searchPanel.mode === "list"
                     ? searchPanel.candidates.map((c) => (
-                        <li key={c.place_id}>
+                        <li
+                          key={c.place_id}
+                          className="swiss-border-b last:border-b-0"
+                          style={{ borderColor: "#f0f0f0" }}
+                        >
                           <button
                             type="button"
                             disabled={loading}
-                            className="w-full px-3 py-2 text-left text-sm text-amber-500/90 hover:bg-zinc-800/80 disabled:opacity-50"
+                            className="w-full text-left bg-white hover:bg-[#fafafa] disabled:opacity-50"
+                            style={{ padding: "12px 16px" }}
                             onClick={() => void pickCandidate(c)}
                           >
-                            {c.name}
+                            <span className="swiss-body-sm text-black">{c.name}</span>
                             {c.formatted_address ? (
-                              <span className="block text-xs font-normal text-zinc-500">
+                              <span
+                                className="block swiss-body-sm mt-1"
+                                style={{ color: "#999", fontSize: 12 }}
+                              >
                                 {c.formatted_address}
                               </span>
                             ) : null}
@@ -417,14 +668,18 @@ export default function OnboardingPage() {
                     <li>
                       <button
                         type="button"
-                        className="w-full px-3 py-2 text-left text-sm text-amber-500/90 hover:bg-zinc-800/80"
-                        onClick={() =>
-                          applyPlaceDetails(searchPanel.place)
-                        }
+                        className="w-full text-left bg-white hover:bg-[#fafafa]"
+                        style={{ padding: "12px 16px" }}
+                        onClick={() => applyPlaceDetails(searchPanel.place)}
                       >
-                        {searchPanel.place.name}
+                        <span className="swiss-body-sm text-black">
+                          {searchPanel.place.name}
+                        </span>
                         {searchPanel.place.formatted_address ? (
-                          <span className="block text-xs font-normal text-zinc-500">
+                          <span
+                            className="block swiss-body-sm mt-1"
+                            style={{ color: "#999", fontSize: 12 }}
+                          >
                             {searchPanel.place.formatted_address}
                           </span>
                         ) : null}
@@ -434,79 +689,56 @@ export default function OnboardingPage() {
                 </ul>
               ) : null}
             </div>
-            <p className="text-xs text-zinc-600">
-              {locale === "de"
-                ? "Mindestens 3 Zeichen — Treffer erscheinen automatisch."
-                : "Type at least 3 characters — results appear as you type."}
-            </p>
 
             {place ? (
-              <div className="border border-zinc-800 rounded-lg p-4 space-y-3 bg-zinc-900/40">
-                <h2 className="text-sm text-zinc-400">{t("ob_preview")}</h2>
-                {photoUrl ? (
-                  <>
-                    {/* eslint-disable-next-line @next/next/no-img-element -- same-origin Places proxy */}
-                    <img
-                      key={`${place.place_id}:${photoUrl}`}
-                      src={photoUrl}
-                      alt=""
-                      className="w-full max-h-48 object-cover rounded border border-zinc-800"
-                    />
-                  </>
-                ) : null}
-                <label className="block text-xs text-zinc-500">{t("ob_label_name")}</label>
-                <input
-                  className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                />
-                <label className="block text-xs text-zinc-500">{t("ob_label_address")}</label>
-                <input
-                  className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
-                  value={editAddress}
-                  onChange={(e) => setEditAddress(e.target.value)}
-                />
-                <label className="block text-xs text-zinc-500">{t("ob_label_desc")}</label>
-                <textarea
-                  className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm min-h-[72px]"
-                  value={editDesc}
-                  onChange={(e) => setEditDesc(e.target.value)}
-                />
-                <label className="block text-xs text-zinc-500">{t("ob_label_website")}</label>
-                <input
-                  className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
-                  value={editWebsite}
-                  onChange={(e) => setEditWebsite(e.target.value)}
-                />
-                <label className="block text-xs text-zinc-500">{t("ob_label_phone")}</label>
-                <input
-                  className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
-                  value={editPhone}
-                  onChange={(e) => setEditPhone(e.target.value)}
-                />
-                {place.types?.length ? (
-                  <p className="text-xs text-zinc-500">
-                    {t("ob_categories")} {place.types.join(", ")}
+              <div className="flex flex-col gap-6">
+                <div>
+                  <p className="swiss-body-sm text-black">{editName || place.name}</p>
+                  <p className="swiss-body-sm mt-1" style={{ color: "#999" }}>
+                    {editAddress || place.formatted_address}
                   </p>
-                ) : null}
-                {place.opening_hours?.weekday_text?.length ? (
-                  <div className="text-xs text-zinc-500 space-y-1">
-                    <div>{t("ob_hours")}</div>
-                    <ul>
-                      {place.opening_hours.weekday_text.map((line) => (
-                        <li key={line}>{line}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                {place.price_level != null ? (
-                  <p className="text-xs text-zinc-500">
-                    {t("ob_price_level", { n: place.price_level })}
-                  </p>
-                ) : null}
+                </div>
+                <div className="flex flex-col gap-4">
+                  <label className="swiss-label">{t("ob_label_name")}</label>
+                  <input
+                    className="w-full swiss-border bg-white outline-none swiss-body-sm"
+                    style={{ padding: "10px 14px" }}
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                  />
+                  <label className="swiss-label">{t("ob_label_address")}</label>
+                  <input
+                    className="w-full swiss-border bg-white outline-none swiss-body-sm"
+                    style={{ padding: "10px 14px" }}
+                    value={editAddress}
+                    onChange={(e) => setEditAddress(e.target.value)}
+                  />
+                  <label className="swiss-label">{t("ob_label_desc")}</label>
+                  <textarea
+                    className="w-full swiss-border bg-white outline-none swiss-body-sm min-h-[72px]"
+                    style={{ padding: "10px 14px" }}
+                    value={editDesc}
+                    onChange={(e) => setEditDesc(e.target.value)}
+                  />
+                  <label className="swiss-label">{t("ob_label_website")}</label>
+                  <input
+                    className="w-full swiss-border bg-white outline-none swiss-body-sm"
+                    style={{ padding: "10px 14px" }}
+                    value={editWebsite}
+                    onChange={(e) => setEditWebsite(e.target.value)}
+                  />
+                  <label className="swiss-label">{t("ob_label_phone")}</label>
+                  <input
+                    className="w-full swiss-border bg-white outline-none swiss-body-sm"
+                    style={{ padding: "10px 14px" }}
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                  />
+                </div>
                 <button
                   type="button"
-                  className="rounded bg-amber-600/90 text-zinc-950 px-4 py-2 text-sm font-medium"
+                  className="w-full bg-black text-white border-0"
+                  style={{ padding: "14px", fontSize: 14, fontWeight: 500 }}
                   onClick={() => setStep(2)}
                 >
                   {t("ob_continue")}
@@ -516,163 +748,137 @@ export default function OnboardingPage() {
           </div>
         ) : null}
 
-        {step === 2 ? (
-          <div className="space-y-6">
-            <button
-              type="button"
-              className="text-xs text-zinc-500 hover:text-zinc-300"
-              onClick={() => setStep(1)}
-            >
-              {t("common_back")}
-            </button>
-            {chipsLoading ? (
-              <p className="text-xs text-zinc-500">{t("common_loading")}</p>
-            ) : null}
-            {QA_KEYS.map(({ key, label }) => {
-              const rowChips =
-                smartChips?.[key] && smartChips[key].length > 0
-                  ? smartChips[key]
-                  : chips[key];
-              return (
-              <div key={key} className="space-y-2">
-                <label className="text-sm text-zinc-300">{t(label)}</label>
-                <textarea
-                  className="w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm min-h-[64px]"
-                  value={qa[key] ?? ""}
-                  onChange={(e) =>
-                    setQa((q) => ({ ...q, [key]: e.target.value }))
-                  }
-                  placeholder={t("common_optional")}
-                />
-                <div className="flex flex-wrap gap-2">
-                  {rowChips.map((chip) => (
-                    <button
-                      key={chip}
-                      type="button"
-                      className="text-xs px-2 py-1 rounded-full border border-zinc-700 text-zinc-400 hover:border-amber-600/50 hover:text-amber-200/90"
-                      onClick={() =>
-                        setQa((q) => ({
-                          ...q,
-                          [key]: [q[key], chip].filter(Boolean).join(" ") || chip,
-                        }))
-                      }
-                    >
-                      {chip}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            );
-            })}
-            <div className="flex gap-3">
-              <button
-                type="button"
-                disabled={loading || !place}
-                onClick={() => void generatePack()}
-                className="rounded bg-amber-600/90 text-zinc-950 px-4 py-2 text-sm font-medium disabled:opacity-50"
-              >
-                {loading ? t("common_loading") : t("ob_generate")}
-              </button>
-            </div>
-          </div>
-        ) : null}
-
         {step === 3 && riddles ? (
-          <div className="space-y-6">
+          <div className="flex flex-col gap-10 max-w-[640px] mx-auto">
             <button
               type="button"
-              className="text-xs text-zinc-500 hover:text-zinc-300"
+              className="text-left swiss-body-sm hover:opacity-70 self-start"
+              style={{ color: "#999", fontSize: 11 }}
               onClick={() => setStep(2)}
             >
               {t("common_back")}
             </button>
-            {riddles.map((r) => (
-              <div
-                key={r.difficulty}
-                className="border border-zinc-800 rounded-lg p-4 space-y-2 bg-zinc-900/40"
-              >
-                <div className="flex justify-between items-center gap-2">
-                  <span className="text-xs text-zinc-500">
+            {riddles.map((r) => {
+              const editing = editRiddle[r.difficulty] ?? false;
+              return (
+                <div
+                  key={r.difficulty}
+                  className="swiss-border bg-white"
+                  style={{ padding: 20 }}
+                >
+                  <div className="swiss-label mb-3" style={{ fontSize: 10 }}>
                     {difficultyLabel(r.difficulty)}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={loading}
-                    className="text-xs text-amber-500/90"
-                    onClick={() => void regenOne(r.difficulty)}
-                  >
-                    {t("ob_regenerate")}
-                  </button>
+                  </div>
+                  {editing ? (
+                    <div className="flex flex-col gap-3">
+                      <textarea
+                        className="w-full swiss-border bg-white outline-none swiss-body"
+                        style={{ padding: "10px 14px", minHeight: 56 }}
+                        value={r.question}
+                        onChange={(e) =>
+                          setRiddles((list) =>
+                            (list ?? []).map((x) =>
+                              x.difficulty === r.difficulty
+                                ? { ...x, question: e.target.value }
+                                : x
+                            )
+                          )
+                        }
+                      />
+                      <input
+                        className="w-full swiss-border bg-white outline-none swiss-body-sm"
+                        style={{ padding: "10px 14px" }}
+                        value={r.answer_keywords.join(", ")}
+                        onChange={(e) =>
+                          setRiddles((list) =>
+                            (list ?? []).map((x) =>
+                              x.difficulty === r.difficulty
+                                ? {
+                                    ...x,
+                                    answer_keywords: e.target.value
+                                      .split(",")
+                                      .map((s) => s.trim())
+                                      .filter(Boolean),
+                                  }
+                                : x
+                            )
+                          )
+                        }
+                      />
+                      <input
+                        className="w-full swiss-border bg-white outline-none swiss-body-sm"
+                        style={{ padding: "10px 14px" }}
+                        value={r.hint_1}
+                        onChange={(e) =>
+                          setRiddles((list) =>
+                            (list ?? []).map((x) =>
+                              x.difficulty === r.difficulty
+                                ? { ...x, hint_1: e.target.value }
+                                : x
+                            )
+                          )
+                        }
+                      />
+                      <input
+                        className="w-full swiss-border bg-white outline-none swiss-body-sm"
+                        style={{ padding: "10px 14px" }}
+                        value={r.hint_2}
+                        onChange={(e) =>
+                          setRiddles((list) =>
+                            (list ?? []).map((x) =>
+                              x.difficulty === r.difficulty
+                                ? { ...x, hint_2: e.target.value }
+                                : x
+                            )
+                          )
+                        }
+                      />
+                    </div>
+                  ) : (
+                    <p
+                      className="text-black"
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 300,
+                        lineHeight: 1.6,
+                      }}
+                    >
+                      {r.question}
+                    </p>
+                  )}
+                  <div className="flex gap-6 mt-4">
+                    <button
+                      type="button"
+                      disabled={loading}
+                      className="bg-transparent border-0 p-0 cursor-pointer hover:opacity-70"
+                      style={{ fontSize: 11, color: "#999", fontWeight: 300 }}
+                      onClick={() => void regenOne(r.difficulty)}
+                    >
+                      {t("ob_regenerate")}
+                    </button>
+                    <button
+                      type="button"
+                      className="bg-transparent border-0 p-0 cursor-pointer hover:opacity-70"
+                      style={{ fontSize: 11, color: "#999", fontWeight: 300 }}
+                      onClick={() =>
+                        setEditRiddle((m) => ({
+                          ...m,
+                          [r.difficulty]: !editing,
+                        }))
+                      }
+                    >
+                      {locale === "de" ? "Bearbeiten" : "Edit"}
+                    </button>
+                  </div>
                 </div>
-                <label className="text-xs text-zinc-500">{t("ob_label_question")}</label>
-                <textarea
-                  className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm min-h-[56px]"
-                  value={r.question}
-                  onChange={(e) =>
-                    setRiddles((list) =>
-                      (list ?? []).map((x) =>
-                        x.difficulty === r.difficulty
-                          ? { ...x, question: e.target.value }
-                          : x
-                      )
-                    )
-                  }
-                />
-                <label className="text-xs text-zinc-500">{t("ob_label_keywords")}</label>
-                <input
-                  className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
-                  value={r.answer_keywords.join(", ")}
-                  onChange={(e) =>
-                    setRiddles((list) =>
-                      (list ?? []).map((x) =>
-                        x.difficulty === r.difficulty
-                          ? {
-                              ...x,
-                              answer_keywords: e.target.value
-                                .split(",")
-                                .map((s) => s.trim())
-                                .filter(Boolean),
-                            }
-                          : x
-                      )
-                    )
-                  }
-                />
-                <label className="text-xs text-zinc-500">{t("ob_label_hint1")}</label>
-                <input
-                  className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
-                  value={r.hint_1}
-                  onChange={(e) =>
-                    setRiddles((list) =>
-                      (list ?? []).map((x) =>
-                        x.difficulty === r.difficulty
-                          ? { ...x, hint_1: e.target.value }
-                          : x
-                      )
-                    )
-                  }
-                />
-                <label className="text-xs text-zinc-500">{t("ob_label_hint2")}</label>
-                <input
-                  className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
-                  value={r.hint_2}
-                  onChange={(e) =>
-                    setRiddles((list) =>
-                      (list ?? []).map((x) =>
-                        x.difficulty === r.difficulty
-                          ? { ...x, hint_2: e.target.value }
-                          : x
-                      )
-                    )
-                  }
-                />
-              </div>
-            ))}
+              );
+            })}
             <button
               type="button"
               disabled={saving}
               onClick={() => void complete()}
-              className="rounded bg-emerald-600/90 text-zinc-950 px-4 py-2 text-sm font-medium disabled:opacity-50"
+              className="w-full bg-black text-white border-0"
+              style={{ padding: "14px", fontSize: 14, fontWeight: 500 }}
             >
               {saving ? t("ob_saving") : t("ob_save")}
             </button>

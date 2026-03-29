@@ -93,31 +93,37 @@ function LanguageToggle() {
     return null;
   }
 
+  const btn = (active: boolean, rounded: "l" | "r") => ({
+    padding: "6px 12px",
+    fontSize: 10,
+    fontWeight: active ? 500 : 300,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase" as const,
+    backgroundColor: active ? "#000000" : "#f0f0f0",
+    color: active ? "#ffffff" : "#999999",
+    border: "none",
+    cursor: "pointer" as const,
+    borderRadius: rounded === "l" ? "2px 0 0 2px" : "0 2px 2px 0",
+  });
+
   return (
     <div
-      className="fixed top-3 right-4 z-[100] flex rounded-md border border-zinc-700 bg-zinc-900/95 backdrop-blur text-xs shadow-lg"
+      className="fixed top-3 right-4 z-[100] flex bg-white swiss-border"
+      style={{ borderRadius: 2 }}
       role="group"
       aria-label={t("lang_toggle_aria")}
     >
       <button
         type="button"
         onClick={() => setLocale("de")}
-        className={
-          locale === "de"
-            ? "px-2.5 py-1.5 rounded-l-md bg-amber-600/90 text-zinc-950 font-medium"
-            : "px-2.5 py-1.5 rounded-l-md text-zinc-400 hover:text-zinc-200"
-        }
+        style={btn(locale === "de", "l")}
       >
         DE
       </button>
       <button
         type="button"
         onClick={() => setLocale("en")}
-        className={
-          locale === "en"
-            ? "px-2.5 py-1.5 rounded-r-md bg-amber-600/90 text-zinc-950 font-medium"
-            : "px-2.5 py-1.5 rounded-r-md text-zinc-400 hover:text-zinc-200"
-        }
+        style={btn(locale === "en", "r")}
       >
         EN
       </button>

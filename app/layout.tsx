@@ -1,6 +1,14 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import { I18nProvider } from "@/lib/i18n/locale-context";
 import "./globals.css";
+
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["300", "500"],
+  display: "swap",
+  variable: "--font-inter",
+});
 
 export const metadata: Metadata = {
   title: "Schnuffis — Bar scavenger hunts",
@@ -13,8 +21,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="de">
-      <body className="min-h-screen antialiased">
+    <html lang="de" className={inter.variable}>
+      <body
+        className={`min-h-screen antialiased font-sans ${inter.className}`}
+        style={{ fontFamily: "var(--font-inter), system-ui, sans-serif" }}
+      >
         <I18nProvider>{children}</I18nProvider>
       </body>
     </html>

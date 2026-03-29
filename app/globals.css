@@ -3,15 +3,63 @@
 @tailwind utilities;
 
 :root {
-  --bg: #0c0c0f;
-  --surface: #16161c;
-  --border: #2a2a32;
-  --text: #e8e6e3;
-  --muted: #8a8794;
-  --accent: #c9a227;
+  --swiss-bg: #ffffff;
+  --swiss-surface: #fafafa;
+  --swiss-border: #e8e8e8;
+  --swiss-text: #000000;
+  --swiss-muted: #999999;
+  --swiss-subtle: #cccccc;
+  --swiss-pill-inactive-bg: #f0f0f0;
 }
 
 body {
-  color: var(--text);
-  background: var(--bg);
+  color: var(--swiss-text);
+  background: var(--swiss-bg);
+}
+
+@layer utilities {
+  .swiss-border {
+    border: 0.5px solid #e8e8e8;
+  }
+  .swiss-border-b {
+    border-bottom: 0.5px solid #e8e8e8;
+  }
+  .swiss-border-t {
+    border-top: 0.5px solid #e8e8e8;
+  }
+  .swiss-border-r {
+    border-right: 0.5px solid #e8e8e8;
+  }
+  .swiss-border-black {
+    border: 0.5px solid #000000;
+  }
+  .swiss-label {
+    font-size: 10px;
+    line-height: 1.4;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #999999;
+  }
+  .swiss-body {
+    font-size: 14px;
+    font-weight: 300;
+    line-height: 1.6;
+  }
+  .swiss-body-sm {
+    font-size: 13px;
+    font-weight: 300;
+    line-height: 1.6;
+  }
+}
+
+.swiss-dashboard-aside {
+  border-bottom: 0.5px solid #e8e8e8;
+}
+
+@media (min-width: 768px) {
+  .swiss-dashboard-aside {
+    border-bottom: none;
+    border-right: 0.5px solid #e8e8e8;
+  }
 }

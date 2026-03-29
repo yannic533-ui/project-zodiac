@@ -1,15 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useI18n } from "@/lib/i18n/locale-context";
 
-export default function DashboardMessagePage() {
+function MessageForm() {
   const { t } = useI18n();
+  const searchParams = useSearchParams();
   const [chatId, setChatId] = useState("");
   const [text, setText] = useState("");
   const [notice, setNotice] = useState<
     { kind: "ok" | "err"; text: string } | null
   >(null);
+
+  useEffect(() => {
+    const pre = searchParams.get("prefill");
+    if (pre) setText(decodeURIComponent(pre));
+  }, [searchParams]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -30,42 +37,70 @@ export default function DashboardMessagePage() {
   }
 
   return (
-    <div className="space-y-4 max-w-lg">
-      <h1 className="text-xl text-zinc-100 font-medium">{t("dash_msg_title")}</h1>
-      <p className="text-sm text-zinc-500">{t("dash_msg_intro")}</p>
-      <form onSubmit={(e) => void onSubmit(e)} className="space-y-3">
-        <input
-          className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
-          placeholder={t("dash_msg_chat_ph")}
-          value={chatId}
-          onChange={(e) => setChatId(e.target.value)}
-          required
-        />
-        <textarea
-          className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm min-h-[100px] text-zinc-100"
-          placeholder={t("dash_msg_text_ph")}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          required
-        />
+    <div className="max-w-lg space-y-6">
+      <p className="swiss-body-sm" style={{ color: "#999999" }}>
+        {t("dash_msg_intro")}
+      </p>
+      <form onSubmit={(e) => void onSubmit(e)} className="space-y-6">
+        <div>
+          <label className="swiss-label block mb-2" style={{ fontSize: 10 }}>
+            {t("dash_msg_chat_ph")}
+          </label>
+          <input
+            className="w-full bg-white swiss-border outline-none swiss-body-sm"
+            style={{ padding: "12px 16px" }}
+            placeholder=""
+            value={chatId}
+            onChange={(e) => setChatId(e.target.value)}
+            required
+          />
+        </div>
+        <div
+          className="swiss-border-black"
+          style={{ padding: "10px 14px" }}
+        >
+          <label className="swiss-label block mb-2" style={{ fontSize: 10 }}>
+            {t("dash_msg_text_ph")}
+          </label>
+          <textarea
+            className="w-full bg-transparent border-0 outline-none resize-none min-h-[100px] swiss-body-sm"
+            placeholder=""
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            required
+          />
+        </div>
         {notice ? (
-          <p
-            className={
-              notice.kind === "ok"
-                ? "text-sm text-emerald-400"
-                : "text-sm text-red-400"
-            }
-          >
+          <p className="swiss-body-sm" style={{ color: "#999999" }}>
             {notice.text}
           </p>
         ) : null}
-        <button
-          type="submit"
-          className="rounded bg-amber-600/90 text-zinc-950 px-4 py-2 text-sm font-medium"
-        >
-          {t("dash_msg_send")}
-        </button>
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            className="flex items-center justify-center bg-black text-white border-0"
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: "50%",
+              fontSize: 14,
+              fontWeight: 500,
+            }}
+            aria-label={t("dash_msg_send")}
+          >
+            ↑
+          </button>
+        </div>
       </form>
     </div>
+  );
+}
+
+export default function DashboardMessagePage() {
+  const { t } = useI18n();
+  return (
+    <Suspense fallback={<p className="swiss-body-sm" style={{ color: "#999" }}>{t("common_loading")}</p>}>
+      <MessageForm />
+    </Suspense>
   );
 }

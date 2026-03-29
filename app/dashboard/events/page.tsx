@@ -12,6 +12,10 @@ type EventRow = {
   active: boolean;
 };
 
+const field =
+  "w-full bg-white swiss-border outline-none swiss-body-sm text-black";
+const pad = { padding: "12px 16px" as const };
+
 export default function DashboardEventsPage() {
   const { t } = useI18n();
   const [events, setEvents] = useState<EventRow[]>([]);
@@ -109,17 +113,22 @@ export default function DashboardEventsPage() {
   const barName = (id: string) => bars.find((b) => b.id === id)?.name ?? id;
 
   return (
-    <div className="space-y-8">
-      <h1 className="text-xl text-zinc-100 font-medium">{t("dash_events_title")}</h1>
-      <p className="text-sm text-zinc-500 max-w-xl">{t("dash_events_intro")}</p>
+    <div className="space-y-10">
+      <p className="swiss-body-sm max-w-xl" style={{ color: "#999999" }}>
+        {t("dash_events_intro")}
+      </p>
 
       <form
         onSubmit={createEvent}
-        className="space-y-4 max-w-2xl border border-zinc-800 rounded-lg p-4 bg-zinc-900/40"
+        className="space-y-6 max-w-2xl swiss-border bg-[#fafafa]"
+        style={{ padding: 24 }}
       >
-        <h2 className="text-sm text-zinc-400">{t("dash_events_create_title")}</h2>
+        <h2 className="swiss-label" style={{ fontSize: 10 }}>
+          {t("dash_events_create_title")}
+        </h2>
         <input
-          className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+          className={field}
+          style={pad}
           placeholder={t("dash_events_name_ph")}
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -127,50 +136,66 @@ export default function DashboardEventsPage() {
         />
         <input
           type="datetime-local"
-          className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+          className={field}
+          style={pad}
           value={date}
           onChange={(e) => setDate(e.target.value)}
         />
         <div>
-          <div className="text-xs text-zinc-500 mb-2">{t("dash_events_route_label")}</div>
-          <div className="flex flex-wrap gap-2 mb-3">
-            {bars.map((b) => (
-              <button
-                key={b.id}
-                type="button"
-                onClick={() => toggleRouteBar(b.id)}
-                className={
-                  route.includes(b.id)
-                    ? "text-xs px-2 py-1 rounded bg-amber-600/30 text-amber-200 border border-amber-600/50"
-                    : "text-xs px-2 py-1 rounded border border-zinc-700 text-zinc-400"
-                }
-              >
-                {b.name}
-              </button>
-            ))}
+          <div className="swiss-label mb-4" style={{ fontSize: 10 }}>
+            {t("dash_events_route_label")}
           </div>
-          <ol className="space-y-1 text-sm text-zinc-300">
+          <div className="flex flex-wrap gap-2 mb-4">
+            {bars.map((b) => {
+              const on = route.includes(b.id);
+              return (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => toggleRouteBar(b.id)}
+                  className="swiss-border swiss-body-sm"
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: 2,
+                    fontSize: 10,
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                    fontWeight: 500,
+                    backgroundColor: on ? "#000000" : "#f0f0f0",
+                    color: on ? "#ffffff" : "#999999",
+                    borderColor: "#e8e8e8",
+                  }}
+                >
+                  {b.name}
+                </button>
+              );
+            })}
+          </div>
+          <ol className="space-y-2">
             {route.map((id, idx) => (
-              <li key={id} className="flex items-center gap-2">
-                <span className="text-zinc-500 w-6">{idx + 1}.</span>
+              <li key={id} className="flex flex-wrap items-center gap-4 swiss-body-sm text-black">
+                <span style={{ color: "#999999", width: 24 }}>{idx + 1}.</span>
                 {barName(id)}
                 <button
                   type="button"
-                  className="text-xs text-zinc-500"
+                  className="bg-transparent border-0"
+                  style={{ fontSize: 11, color: "#999999" }}
                   onClick={() => move(idx, -1)}
                 >
                   {t("dash_events_up")}
                 </button>
                 <button
                   type="button"
-                  className="text-xs text-zinc-500"
+                  className="bg-transparent border-0"
+                  style={{ fontSize: 11, color: "#999999" }}
                   onClick={() => move(idx, 1)}
                 >
                   {t("dash_events_down")}
                 </button>
                 <button
                   type="button"
-                  className="text-xs text-red-400/80"
+                  className="bg-transparent border-0"
+                  style={{ fontSize: 11, color: "#999999" }}
                   onClick={() => setRoute((r) => r.filter((x) => x !== id))}
                 >
                   {t("dash_events_remove")}
@@ -181,54 +206,72 @@ export default function DashboardEventsPage() {
         </div>
         <button
           type="submit"
-          className="rounded bg-amber-600/90 text-zinc-950 px-4 py-2 text-sm font-medium"
+          className="bg-black text-white border-0"
+          style={{ padding: "14px 24px", fontSize: 14, fontWeight: 500 }}
         >
           {t("dash_events_create_btn")}
         </button>
       </form>
 
-      <ul className="space-y-3">
+      <ul className="space-y-0 max-w-4xl">
         {events.map((ev) => (
           <li
             key={ev.id}
-            className="border border-zinc-800 rounded-lg p-4 bg-zinc-900/30"
+            className="swiss-border-b swiss-body-sm py-6 flex flex-wrap items-start justify-between gap-4"
+            style={{ borderColor: "#e8e8e8" }}
           >
-            <div className="flex flex-wrap items-center gap-3 justify-between">
-              <div>
-                <div className="text-zinc-100 font-medium">{ev.name}</div>
-                <div className="text-xs text-zinc-500 mt-1">
-                  {(ev.route ?? []).map((id) => barName(id)).join(" → ") || "—"}
-                </div>
+            <div>
+              <div className="text-black font-medium" style={{ fontWeight: 500, fontSize: 14 }}>
+                {ev.name}
               </div>
-              <div className="flex gap-2 flex-wrap">
-                {ev.active ? (
-                  <span className="text-xs text-emerald-500">{t("dash_events_active")}</span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => void setActive(ev.id)}
-                    className="text-xs text-amber-500"
-                  >
-                    {t("dash_events_set_active")}
-                  </button>
-                )}
-                {ev.active ? (
-                  <button
-                    type="button"
-                    onClick={() => void deactivate(ev.id)}
-                    className="text-xs text-zinc-400"
-                  >
-                    {t("dash_events_deactivate")}
-                  </button>
-                ) : null}
+              <div className="mt-2" style={{ color: "#999999", fontSize: 12 }}>
+                {(ev.route ?? []).map((id) => barName(id)).join(" → ") || "—"}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-4 items-center">
+              {ev.active ? (
+                <span
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: 2,
+                    fontSize: 10,
+                    fontWeight: 500,
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                    backgroundColor: "#000000",
+                    color: "#ffffff",
+                  }}
+                >
+                  {t("dash_events_active")}
+                </span>
+              ) : (
                 <button
                   type="button"
-                  onClick={() => void removeEvent(ev.id)}
-                  className="text-xs text-red-400"
+                  onClick={() => void setActive(ev.id)}
+                  className="bg-transparent border-0"
+                  style={{ fontSize: 11, color: "#999999" }}
                 >
-                  {t("dash_events_delete")}
+                  {t("dash_events_set_active")}
                 </button>
-              </div>
+              )}
+              {ev.active ? (
+                <button
+                  type="button"
+                  onClick={() => void deactivate(ev.id)}
+                  className="bg-transparent border-0"
+                  style={{ fontSize: 11, color: "#999999" }}
+                >
+                  {t("dash_events_deactivate")}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void removeEvent(ev.id)}
+                className="bg-transparent border-0"
+                style={{ fontSize: 11, color: "#999999" }}
+              >
+                {t("dash_events_delete")}
+              </button>
             </div>
           </li>
         ))}
