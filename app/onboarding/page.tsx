@@ -123,6 +123,120 @@ function AnimatedAgentText({
   );
 }
 
+type OnboardingRespondHistoryItem = {
+  role: "user" | "assistant";
+  text: string;
+};
+
+function placeBarDescription(p: PlaceDetailsResult): string {
+  return p.editorial_summary?.overview?.trim() ?? "";
+}
+
+function placeBarWebsite(p: PlaceDetailsResult): string {
+  return p.website?.trim() ?? "";
+}
+
+function chatMessagesToRespondHistory(
+  msgs: ChatMessage[]
+): OnboardingRespondHistoryItem[] {
+  const out: OnboardingRespondHistoryItem[] = [];
+  for (const m of msgs) {
+    if (m.kind !== "text") continue;
+    if (m.role === "user") out.push({ role: "user", text: m.text });
+    if (m.role === "agent")
+      out.push({ role: "assistant", text: m.text });
+  }
+  return out;
+}
+
+function buildOnboardingRespondSystem(params: {
+  barName: string;
+  barAddress: string;
+  barDescription: string;
+  barWebsite: string;
+  locale: "de" | "en";
+  phase: "confirm" | "qa";
+}): string {
+  const {
+    barName,
+    barAddress,
+    barDescription,
+    barWebsite,
+    locale,
+    phase,
+  } = params;
+  const lang = locale === "de" ? "German" : "English";
+  const parts = [
+    "You help onboard a bar for a trivia/riddle game app.",
+    `Bar name: ${barName}`,
+    `Address: ${barAddress}`,
+    barDescription ? `Description: ${barDescription}` : null,
+    barWebsite ? `Website: ${barWebsite}` : null,
+    `Locale: ${locale}. Reply only in ${lang}.`,
+    phase === "confirm"
+      ? `Phase: confirm. The user just confirmed this bar. Send a single opening message: briefly reflect light web research about this venue (atmosphere, what it is known for), then ask what else they want the game to know. Stay concise and warm.`
+      : `Phase: qa. Continue naturally from the prior messages. Short follow-up questions are fine. Do not paste the full bar address block again unless needed. One message only.`,
+  ];
+  return parts.filter(Boolean).join("\n");
+}
+
+function buildOnboardingRespondRequestBody(params: {
+  place: PlaceDetailsResult;
+  locale: "de" | "en";
+  phase: "confirm" | "qa";
+  message: string;
+  history: OnboardingRespondHistoryItem[];
+}): { messages: { role: "user" | "assistant"; content: string }[]; system: string } {
+  const { place, locale, phase, message, history } = params;
+  const system = buildOnboardingRespondSystem({
+    barName: place.name,
+    barAddress: place.formatted_address ?? "",
+    barDescription: placeBarDescription(place),
+    barWebsite: placeBarWebsite(place),
+    locale,
+    phase,
+  });
+  const prior = history.map((h) => ({
+    role: h.role,
+    content: h.text,
+  }));
+  const messages: { role: "user" | "assistant"; content: string }[] = [
+    ...prior,
+    { role: "user", content: message },
+  ];
+  return { messages, system };
+}
+
+async function postOnboardingRespond(
+  place: PlaceDetailsResult,
+  locale: "de" | "en",
+  phase: "confirm" | "qa",
+  message: string,
+  history: OnboardingRespondHistoryItem[]
+): Promise<{ text: string }> {
+  const { messages, system } = buildOnboardingRespondRequestBody({
+    place,
+    locale,
+    phase,
+    message,
+    history,
+  });
+  const res = await fetch("/api/onboarding/respond", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ messages, system }),
+  });
+  const j = (await res.json()) as { text?: string; error?: string };
+  if (!res.ok) {
+    throw new Error(j.error ?? `HTTP ${res.status}`);
+  }
+  if (!j.text?.trim()) {
+    throw new Error("Empty response");
+  }
+  return { text: j.text.trim() };
+}
+
 function isDoneMessage(raw: string, locale: "de" | "en"): boolean {
   const t = raw.trim().toLowerCase();
   if (locale === "de") {
@@ -130,18 +244,22 @@ function isDoneMessage(raw: string, locale: "de" | "en"): boolean {
       t === "nein" ||
       t === "reicht" ||
       t === "nichts" ||
+      t === "done" ||
       t === "nein." ||
       t === "reicht." ||
-      t === "nichts."
+      t === "nichts." ||
+      t === "done."
     );
   }
   return (
     t === "no" ||
     t === "enough" ||
     t === "nothing" ||
+    t === "done" ||
     t === "no." ||
     t === "enough." ||
-    t === "nothing."
+    t === "nothing." ||
+    t === "done."
   );
 }
 
@@ -189,6 +307,7 @@ export default function OnboardingPage() {
             whatElse: (name: string) =>
               `${name}. Was sollen wir noch wissen?`,
             noch: "Noch etwas?",
+            generatingNow: "Gut. Ich generiere jetzt.",
             moment: "Einen Moment.",
             reviewAsk: "Schau sie durch. Alles in Ordnung?",
             looksGood: "Sieht gut aus",
@@ -209,6 +328,7 @@ export default function OnboardingPage() {
             whatElse: (name: string) =>
               `${name}. What else should we know?`,
             noch: "Anything else?",
+            generatingNow: "Good. I'm generating now.",
             moment: "One moment.",
             reviewAsk: "Look them over. All good?",
             looksGood: "Looks good",
@@ -259,6 +379,7 @@ export default function OnboardingPage() {
   const seededRef = useRef(false);
   const messagesRef = useRef<ChatMessage[]>([]);
   messagesRef.current = messages;
+  const qaUserSendCountRef = useRef(0);
 
   const qa: OnboardingQa = useMemo(
     () => buildQaFromNotes(qaNotes),
@@ -522,26 +643,52 @@ export default function OnboardingPage() {
 
   function onConfirmJa() {
     if (!place) return;
+    const p = place;
     setProgressPct(25);
     setQaNotes([]);
     setFirstQaMessageSent(false);
+    qaUserSendCountRef.current = 0;
     setInput("");
     resetTextareaHeight();
+    setPhase("qa");
     void (async () => {
-      await agentSay(() =>
+      setErr("");
+      setTyping(true);
+      requestAnimationFrame(() => scrollToBottom(true));
+      const confirmMessage =
+        lc === "de"
+          ? "Die Bar-Auswahl ist bestätigt. Sende jetzt deine erste Nachricht."
+          : "The bar selection is confirmed. Send your opening message now.";
+      try {
+        const { text } = await postOnboardingRespond(
+          p,
+          lc,
+          "confirm",
+          confirmMessage,
+          []
+        );
+        setTyping(false);
+        appendMessages(
+          [{ id: uid(), role: "agent", kind: "text", text }],
+          false
+        );
+        requestAnimationFrame(() => scrollToBottom(true));
+      } catch {
+        setTyping(false);
+        setErr(t("ob_err_network"));
         appendMessages(
           [
             {
               id: uid(),
               role: "agent",
               kind: "text",
-              text: copy.whatElse(place.name),
+              text: copy.whatElse(p.name),
             },
           ],
           false
-        )
-      );
-      setPhase("qa");
+        );
+        requestAnimationFrame(() => scrollToBottom(true));
+      }
     })();
   }
 
@@ -796,6 +943,9 @@ export default function OnboardingPage() {
   async function handleQaSend(text: string) {
     const trimmed = text.trim();
     if (!trimmed) return;
+    if (!place) return;
+
+    const prevHistory = chatMessagesToRespondHistory(messagesRef.current);
 
     appendMessages(
       [{ id: uid(), role: "user", kind: "text", text: trimmed }],
@@ -809,20 +959,61 @@ export default function OnboardingPage() {
       setProgressPct(50);
     }
 
-    if (isDoneMessage(trimmed, lc)) {
-      await delay(400);
+    async function showGutAndGenerate() {
+      setQaNotes((n) => [...n, trimmed]);
+      appendMessages(
+        [
+          {
+            id: uid(),
+            role: "agent",
+            kind: "text",
+            text: copy.generatingNow,
+          },
+        ],
+        false
+      );
+      await delay(700);
       await generatePack();
+    }
+
+    if (isDoneMessage(trimmed, lc)) {
+      await showGutAndGenerate();
+      return;
+    }
+
+    qaUserSendCountRef.current += 1;
+    if (qaUserSendCountRef.current >= 3) {
+      await showGutAndGenerate();
       return;
     }
 
     setQaNotes((n) => [...n, trimmed]);
-    await delay(400);
-    await agentSay(() =>
+    setErr("");
+    setTyping(true);
+    requestAnimationFrame(() => scrollToBottom(true));
+    try {
+      const { text: reply } = await postOnboardingRespond(
+        place,
+        lc,
+        "qa",
+        trimmed,
+        prevHistory
+      );
+      setTyping(false);
+      appendMessages(
+        [{ id: uid(), role: "agent", kind: "text", text: reply }],
+        false
+      );
+      requestAnimationFrame(() => scrollToBottom(true));
+    } catch {
+      setTyping(false);
+      setErr(t("ob_err_network"));
       appendMessages(
         [{ id: uid(), role: "agent", kind: "text", text: copy.noch }],
         false
-      )
-    );
+      );
+      requestAnimationFrame(() => scrollToBottom(true));
+    }
   }
 
   function difficultyUpper(d: number): string {
@@ -862,7 +1053,8 @@ export default function OnboardingPage() {
     phase === "review_riddles" ||
     phase === "done" ||
     loading ||
-    saving;
+    saving ||
+    (phase === "qa" && typing);
 
   const showGenButton = phase === "qa" && !loading && !saving;
 
