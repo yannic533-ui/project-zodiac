@@ -3,24 +3,37 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const PHOTO_NAME_RE = /^places\/[^/]+\/photos\/.+$/;
+
 export async function GET(request: Request) {
   const key = process.env.GOOGLE_PLACES_API_KEY;
   if (!key) {
     return NextResponse.json({ error: "Not configured" }, { status: 500 });
   }
 
-  const ref = new URL(request.url).searchParams.get("ref");
-  const maxwidth = new URL(request.url).searchParams.get("maxwidth") ?? "800";
-  if (!ref?.trim()) {
-    return NextResponse.json({ error: "Missing ref" }, { status: 400 });
+  const url = new URL(request.url);
+  const name =
+    url.searchParams.get("name")?.trim() ?? url.searchParams.get("ref")?.trim();
+  const maxWidthPx =
+    url.searchParams.get("maxWidthPx") ??
+    url.searchParams.get("maxwidth") ??
+    "800";
+
+  if (!name) {
+    return NextResponse.json({ error: "Missing name" }, { status: 400 });
   }
 
-  const u = new URL("https://maps.googleapis.com/maps/api/place/photo");
-  u.searchParams.set("maxwidth", maxwidth);
-  u.searchParams.set("photo_reference", ref.trim());
-  u.searchParams.set("key", key);
+  if (!PHOTO_NAME_RE.test(name)) {
+    return NextResponse.json({ error: "Invalid photo name" }, { status: 400 });
+  }
 
-  const res = await fetch(u.toString(), { redirect: "manual" });
+  const mediaUrl = new URL(
+    `https://places.googleapis.com/v1/${name}/media`
+  );
+  mediaUrl.searchParams.set("maxWidthPx", maxWidthPx);
+  mediaUrl.searchParams.set("key", key);
+
+  const res = await fetch(mediaUrl.toString(), { redirect: "manual" });
   if (res.status >= 300 && res.status < 400) {
     const loc = res.headers.get("location");
     if (loc) {

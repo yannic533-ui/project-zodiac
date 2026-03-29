@@ -3,37 +3,28 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { PlaceDetailsResult } from "@/lib/google-places";
+import { placePhotoProxyUrl, type PlaceDetailsResult } from "@/lib/google-places";
 import type { OnboardingQa } from "@/lib/onboarding-context";
 import type { OnboardingRiddleDraft } from "@/lib/onboarding-riddles";
-
-const QA_CHIPS: Record<keyof OnboardingQa, string[]> = {
-  special: [
-    "Live jazz on Thursdays",
-    "Best Old Fashioned in the neighborhood",
-    "Tiny terrace out back",
-  ],
-  story: [
-    "Named after the landlord’s dog",
-    "A former apothecary",
-    "Same family for three generations",
-  ],
-  regulars: [
-    "The house red and a plate of cheese",
-    "Whatever is on the blackboard",
-    "Shot of kirsch before midnight",
-  ],
-  insider: [
-    "Ring the unmarked bell",
-    "Ask for the corner table upstairs",
-    "They only take cash after 11",
-  ],
-};
+import { useI18n } from "@/lib/i18n/locale-context";
+import {
+  QA_CHIPS,
+  type MessageKey,
+  type OnboardingQaKey,
+} from "@/lib/i18n/translations";
 
 type Candidate = { place_id: string; name: string; formatted_address?: string };
 
+const QA_KEYS: { key: OnboardingQaKey; label: MessageKey }[] = [
+  { key: "special", label: "ob_q_special" },
+  { key: "story", label: "ob_q_story" },
+  { key: "regulars", label: "ob_q_regulars" },
+  { key: "insider", label: "ob_q_insider" },
+];
+
 export default function OnboardingPage() {
   const router = useRouter();
+  const { t, locale } = useI18n();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -49,11 +40,16 @@ export default function OnboardingPage() {
   const [riddles, setRiddles] = useState<OnboardingRiddleDraft[] | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const chips = QA_CHIPS[locale];
+
   const photoUrl = useMemo(() => {
     const ref = place?.photos?.[0]?.photo_reference;
     if (!ref) return null;
-    return `/api/places/photo?ref=${encodeURIComponent(ref)}&maxwidth=640`;
+    return placePhotoProxyUrl(ref, 640);
   }, [place]);
+
+  const stepLabel =
+    step === 1 ? t("ob_step1_label") : step === 2 ? t("ob_step2_label") : t("ob_step3_label");
 
   async function runSearch() {
     setErr("");
@@ -64,14 +60,14 @@ export default function OnboardingPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({ query, languageCode: locale }),
       });
       const j = (await res.json()) as
         | { mode: "single"; place: PlaceDetailsResult }
         | { mode: "list"; candidates: Candidate[] }
         | { error?: string };
       if (!res.ok) {
-        setErr((j as { error?: string }).error ?? "Search failed");
+        setErr((j as { error?: string }).error ?? t("ob_err_search"));
         setLoading(false);
         return;
       }
@@ -89,7 +85,7 @@ export default function OnboardingPage() {
         setPlace(null);
       }
     } catch {
-      setErr("Network error");
+      setErr(t("ob_err_network"));
     }
     setLoading(false);
   }
@@ -99,12 +95,12 @@ export default function OnboardingPage() {
     setLoading(true);
     try {
       const res = await fetch(
-        `/api/places/details?place_id=${encodeURIComponent(c.place_id)}`,
+        `/api/places/details?place_id=${encodeURIComponent(c.place_id)}&languageCode=${locale}`,
         { credentials: "include" }
       );
       const j = (await res.json()) as { place?: PlaceDetailsResult; error?: string };
       if (!res.ok) {
-        setErr(j.error ?? "Failed to load place");
+        setErr(j.error ?? t("ob_err_place"));
         setLoading(false);
         return;
       }
@@ -120,7 +116,7 @@ export default function OnboardingPage() {
         setCandidates(null);
       }
     } catch {
-      setErr("Network error");
+      setErr(t("ob_err_network"));
     }
     setLoading(false);
   }
@@ -141,14 +137,14 @@ export default function OnboardingPage() {
         error?: string;
       };
       if (!res.ok) {
-        setErr(j.error ?? "Generation failed");
+        setErr(j.error ?? t("ob_err_generate"));
         setLoading(false);
         return;
       }
       setRiddles(j.riddles ?? []);
       setStep(3);
     } catch {
-      setErr("Network error");
+      setErr(t("ob_err_network"));
     }
     setLoading(false);
   }
@@ -175,7 +171,7 @@ export default function OnboardingPage() {
         error?: string;
       };
       if (!res.ok) {
-        setErr(j.error ?? "Regenerate failed");
+        setErr(j.error ?? t("ob_err_regen"));
         setLoading(false);
         return;
       }
@@ -185,7 +181,7 @@ export default function OnboardingPage() {
         );
       }
     } catch {
-      setErr("Network error");
+      setErr(t("ob_err_network"));
     }
     setLoading(false);
   }
@@ -219,46 +215,50 @@ export default function OnboardingPage() {
       });
       const j = (await res.json()) as { error?: string };
       if (!res.ok) {
-        setErr(j.error ?? "Save failed");
+        setErr(j.error ?? t("ob_err_save"));
         setSaving(false);
         return;
       }
       router.push("/dashboard");
       router.refresh();
     } catch {
-      setErr("Network error");
+      setErr(t("ob_err_network"));
     }
     setSaving(false);
   }
 
+  function difficultyLabel(d: number) {
+    if (d === 1) return t("ob_diff_easy");
+    if (d === 2) return t("ob_diff_medium");
+    return t("ob_diff_hard");
+  }
+
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 px-4 py-10">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 px-4 py-10 pr-20">
       <div className="max-w-xl mx-auto space-y-8">
         <div className="flex items-center justify-between gap-4">
-          <h1 className="text-xl font-medium text-amber-500/90">Add your bar</h1>
+          <h1 className="text-xl font-medium text-amber-500/90">{t("ob_title")}</h1>
           <Link
             href="/dashboard"
             className="text-sm text-zinc-500 hover:text-zinc-300"
           >
-            Dashboard
+            {t("ob_dashboard_link")}
           </Link>
         </div>
         <p className="text-sm text-zinc-500">
-          Step {step} of 3 — {step === 1 ? "Find your bar" : step === 2 ? "Tell us more" : "Riddles"}
+          {t("ob_step", { step: String(step), label: stepLabel })}
         </p>
 
         {err ? <p className="text-sm text-red-400">{err}</p> : null}
 
         {step === 1 ? (
           <div className="space-y-4">
-            <label className="block text-sm text-zinc-400">
-              Paste your Google Maps link or search your bar name
-            </label>
+            <label className="block text-sm text-zinc-400">{t("ob_q1_label")}</label>
             <input
               className="w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Maps link or bar name"
+              placeholder={t("ob_q1_ph")}
             />
             <button
               type="button"
@@ -266,12 +266,12 @@ export default function OnboardingPage() {
               onClick={() => void runSearch()}
               className="rounded bg-amber-600/90 text-zinc-950 px-4 py-2 text-sm font-medium disabled:opacity-50"
             >
-              {loading ? "…" : "Look up"}
+              {loading ? t("common_loading") : t("ob_lookup")}
             </button>
 
             {candidates?.length ? (
               <ul className="space-y-2 border border-zinc-800 rounded-lg p-3 bg-zinc-900/40">
-                <li className="text-xs text-zinc-500">Pick a match:</li>
+                <li className="text-xs text-zinc-500">{t("ob_pick_match")}</li>
                 {candidates.map((c) => (
                   <li key={c.place_id}>
                     <button
@@ -293,7 +293,7 @@ export default function OnboardingPage() {
 
             {place ? (
               <div className="border border-zinc-800 rounded-lg p-4 space-y-3 bg-zinc-900/40">
-                <h2 className="text-sm text-zinc-400">Preview</h2>
+                <h2 className="text-sm text-zinc-400">{t("ob_preview")}</h2>
                 {photoUrl ? (
                   <>
                     {/* eslint-disable-next-line @next/next/no-img-element -- same-origin Places proxy */}
@@ -304,31 +304,31 @@ export default function OnboardingPage() {
                     />
                   </>
                 ) : null}
-                <label className="block text-xs text-zinc-500">Name</label>
+                <label className="block text-xs text-zinc-500">{t("ob_label_name")}</label>
                 <input
                   className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
                 />
-                <label className="block text-xs text-zinc-500">Address</label>
+                <label className="block text-xs text-zinc-500">{t("ob_label_address")}</label>
                 <input
                   className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
                   value={editAddress}
                   onChange={(e) => setEditAddress(e.target.value)}
                 />
-                <label className="block text-xs text-zinc-500">Description</label>
+                <label className="block text-xs text-zinc-500">{t("ob_label_desc")}</label>
                 <textarea
                   className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm min-h-[72px]"
                   value={editDesc}
                   onChange={(e) => setEditDesc(e.target.value)}
                 />
-                <label className="block text-xs text-zinc-500">Website</label>
+                <label className="block text-xs text-zinc-500">{t("ob_label_website")}</label>
                 <input
                   className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
                   value={editWebsite}
                   onChange={(e) => setEditWebsite(e.target.value)}
                 />
-                <label className="block text-xs text-zinc-500">Phone</label>
+                <label className="block text-xs text-zinc-500">{t("ob_label_phone")}</label>
                 <input
                   className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
                   value={editPhone}
@@ -336,12 +336,12 @@ export default function OnboardingPage() {
                 />
                 {place.types?.length ? (
                   <p className="text-xs text-zinc-500">
-                    Categories: {place.types.join(", ")}
+                    {t("ob_categories")} {place.types.join(", ")}
                   </p>
                 ) : null}
                 {place.opening_hours?.weekday_text?.length ? (
                   <div className="text-xs text-zinc-500 space-y-1">
-                    <div>Hours</div>
+                    <div>{t("ob_hours")}</div>
                     <ul>
                       {place.opening_hours.weekday_text.map((line) => (
                         <li key={line}>{line}</li>
@@ -351,7 +351,7 @@ export default function OnboardingPage() {
                 ) : null}
                 {place.price_level != null ? (
                   <p className="text-xs text-zinc-500">
-                    Price level: {place.price_level} (0–4)
+                    {t("ob_price_level", { n: place.price_level })}
                   </p>
                 ) : null}
                 <button
@@ -359,7 +359,7 @@ export default function OnboardingPage() {
                   className="rounded bg-amber-600/90 text-zinc-950 px-4 py-2 text-sm font-medium"
                   onClick={() => setStep(2)}
                 >
-                  Continue
+                  {t("ob_continue")}
                 </button>
               </div>
             ) : null}
@@ -373,28 +373,21 @@ export default function OnboardingPage() {
               className="text-xs text-zinc-500 hover:text-zinc-300"
               onClick={() => setStep(1)}
             >
-              ← Back
+              {t("common_back")}
             </button>
-            {(
-              [
-                ["special", "What makes your bar special?"],
-                ["story", "Is there a story behind the name or location?"],
-                ["regulars", "What do regulars always order?"],
-                ["insider", "What would an insider know that a tourist wouldn’t?"],
-              ] as const
-            ).map(([key, label]) => (
+            {QA_KEYS.map(({ key, label }) => (
               <div key={key} className="space-y-2">
-                <label className="text-sm text-zinc-300">{label}</label>
+                <label className="text-sm text-zinc-300">{t(label)}</label>
                 <textarea
                   className="w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm min-h-[64px]"
                   value={qa[key] ?? ""}
                   onChange={(e) =>
                     setQa((q) => ({ ...q, [key]: e.target.value }))
                   }
-                  placeholder="Optional"
+                  placeholder={t("common_optional")}
                 />
                 <div className="flex flex-wrap gap-2">
-                  {QA_CHIPS[key].map((chip) => (
+                  {chips[key].map((chip) => (
                     <button
                       key={chip}
                       type="button"
@@ -419,7 +412,7 @@ export default function OnboardingPage() {
                 onClick={() => void generatePack()}
                 className="rounded bg-amber-600/90 text-zinc-950 px-4 py-2 text-sm font-medium disabled:opacity-50"
               >
-                {loading ? "…" : "Generate riddles"}
+                {loading ? t("common_loading") : t("ob_generate")}
               </button>
             </div>
           </div>
@@ -432,7 +425,7 @@ export default function OnboardingPage() {
               className="text-xs text-zinc-500 hover:text-zinc-300"
               onClick={() => setStep(2)}
             >
-              ← Back
+              {t("common_back")}
             </button>
             {riddles.map((r) => (
               <div
@@ -441,11 +434,7 @@ export default function OnboardingPage() {
               >
                 <div className="flex justify-between items-center gap-2">
                   <span className="text-xs text-zinc-500">
-                    {r.difficulty === 1
-                      ? "Easy"
-                      : r.difficulty === 2
-                        ? "Medium"
-                        : "Hard"}
+                    {difficultyLabel(r.difficulty)}
                   </span>
                   <button
                     type="button"
@@ -453,10 +442,10 @@ export default function OnboardingPage() {
                     className="text-xs text-amber-500/90"
                     onClick={() => void regenOne(r.difficulty)}
                   >
-                    Regenerate
+                    {t("ob_regenerate")}
                   </button>
                 </div>
-                <label className="text-xs text-zinc-500">Question</label>
+                <label className="text-xs text-zinc-500">{t("ob_label_question")}</label>
                 <textarea
                   className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm min-h-[56px]"
                   value={r.question}
@@ -470,7 +459,7 @@ export default function OnboardingPage() {
                     )
                   }
                 />
-                <label className="text-xs text-zinc-500">Answer keywords (comma-separated)</label>
+                <label className="text-xs text-zinc-500">{t("ob_label_keywords")}</label>
                 <input
                   className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
                   value={r.answer_keywords.join(", ")}
@@ -490,7 +479,7 @@ export default function OnboardingPage() {
                     )
                   }
                 />
-                <label className="text-xs text-zinc-500">Hint 1</label>
+                <label className="text-xs text-zinc-500">{t("ob_label_hint1")}</label>
                 <input
                   className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
                   value={r.hint_1}
@@ -504,7 +493,7 @@ export default function OnboardingPage() {
                     )
                   }
                 />
-                <label className="text-xs text-zinc-500">Hint 2</label>
+                <label className="text-xs text-zinc-500">{t("ob_label_hint2")}</label>
                 <input
                   className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
                   value={r.hint_2}
@@ -526,7 +515,7 @@ export default function OnboardingPage() {
               onClick={() => void complete()}
               className="rounded bg-emerald-600/90 text-zinc-950 px-4 py-2 text-sm font-medium disabled:opacity-50"
             >
-              {saving ? "Saving…" : "Looks good — save bar"}
+              {saving ? t("ob_saving") : t("ob_save")}
             </button>
           </div>
         ) : null}

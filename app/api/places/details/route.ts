@@ -13,13 +13,19 @@ export async function GET(request: Request) {
     );
   }
 
-  const placeId = new URL(request.url).searchParams.get("place_id");
+  const url = new URL(request.url);
+  const placeId = url.searchParams.get("place_id");
+  const languageCode = url.searchParams.get("languageCode") ?? "de";
   if (!placeId?.trim()) {
     return NextResponse.json({ error: "Missing place_id" }, { status: 400 });
   }
 
   try {
-    const place = await fetchPlaceDetails(placeId.trim(), key);
+    const place = await fetchPlaceDetails(
+      placeId.trim(),
+      key,
+      languageCode === "en" ? "en" : "de"
+    );
     if (!place) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }

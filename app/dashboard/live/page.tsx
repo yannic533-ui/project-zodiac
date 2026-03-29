@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { useI18n } from "@/lib/i18n/locale-context";
 
 type LiveRow = {
   id: string;
@@ -16,23 +17,24 @@ type LiveRow = {
 };
 
 export default function DashboardLivePage() {
+  const { t } = useI18n();
   const [groups, setGroups] = useState<LiveRow[]>([]);
-  const [err, setErr] = useState("");
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/dashboard/live", { credentials: "include" });
     if (!res.ok) {
-      setErr("Failed to load");
+      setLoadFailed(true);
       return;
     }
     const j = (await res.json()) as { groups: LiveRow[] };
-    setErr("");
+    setLoadFailed(false);
     setGroups(j.groups ?? []);
   }, []);
 
   useEffect(() => {
     void load();
-    const t = setInterval(() => void load(), 4000);
+    const interval = setInterval(() => void load(), 4000);
     const supabase = createSupabaseBrowserClient();
     const channel = supabase
       .channel("dashboard-groups")
@@ -43,37 +45,36 @@ export default function DashboardLivePage() {
       )
       .subscribe();
     return () => {
-      clearInterval(t);
+      clearInterval(interval);
       void supabase.removeChannel(channel);
     };
   }, [load]);
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl text-zinc-100 font-medium">Live groups</h1>
-      <p className="text-sm text-zinc-500">
-        Groups playing your events. Updates on an interval and when groups
-        change (realtime when enabled in Supabase).
-      </p>
-      {err ? <p className="text-red-400 text-sm">{err}</p> : null}
+      <h1 className="text-xl text-zinc-100 font-medium">{t("dash_live_title")}</h1>
+      <p className="text-sm text-zinc-500">{t("dash_live_intro")}</p>
+      {loadFailed ? (
+        <p className="text-red-400 text-sm">{t("dash_live_err")}</p>
+      ) : null}
       <div className="overflow-x-auto rounded border border-zinc-800">
         <table className="w-full text-sm text-left">
           <thead className="bg-zinc-900 text-zinc-400">
             <tr>
-              <th className="p-2">Group</th>
-              <th className="p-2">Chat ID</th>
-              <th className="p-2">Event</th>
-              <th className="p-2">State</th>
-              <th className="p-2">Bar</th>
-              <th className="p-2">Pts</th>
-              <th className="p-2">Lang</th>
+              <th className="p-2">{t("dash_live_th_group")}</th>
+              <th className="p-2">{t("dash_live_th_chat")}</th>
+              <th className="p-2">{t("dash_live_th_event")}</th>
+              <th className="p-2">{t("dash_live_th_state")}</th>
+              <th className="p-2">{t("dash_live_th_bar")}</th>
+              <th className="p-2">{t("dash_live_th_pts")}</th>
+              <th className="p-2">{t("dash_live_th_lang")}</th>
             </tr>
           </thead>
           <tbody>
             {groups.length === 0 ? (
               <tr>
                 <td colSpan={7} className="p-4 text-zinc-500">
-                  No groups in your events yet.
+                  {t("dash_live_empty")}
                 </td>
               </tr>
             ) : (

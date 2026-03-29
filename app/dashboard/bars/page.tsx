@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useI18n } from "@/lib/i18n/locale-context";
 
 type Bar = {
   id: string;
@@ -11,6 +12,7 @@ type Bar = {
 };
 
 export default function DashboardBarsPage() {
+  const { t } = useI18n();
   const [bars, setBars] = useState<Bar[]>([]);
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
@@ -38,7 +40,7 @@ export default function DashboardBarsPage() {
       body: JSON.stringify({ name, address, prize_description: prize }),
     });
     if (!res.ok) {
-      setMsg("Failed to create");
+      setMsg(t("dash_bars_fail_create"));
       return;
     }
     setName("");
@@ -58,7 +60,7 @@ export default function DashboardBarsPage() {
   }
 
   async function removeBar(id: string) {
-    if (!confirm("Delete bar and its riddles?")) return;
+    if (!confirm(t("dash_bars_confirm_delete"))) return;
     await fetch(`/api/dashboard/bars?id=${encodeURIComponent(id)}`, {
       method: "DELETE",
       credentials: "include",
@@ -68,30 +70,30 @@ export default function DashboardBarsPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-xl text-zinc-100 font-medium">My bars</h1>
+      <h1 className="text-xl text-zinc-100 font-medium">{t("dash_bars_title")}</h1>
 
       <form
         onSubmit={addBar}
         className="space-y-3 max-w-lg border border-zinc-800 rounded-lg p-4 bg-zinc-900/40"
       >
-        <h2 className="text-sm text-zinc-400">Add bar</h2>
+        <h2 className="text-sm text-zinc-400">{t("dash_bars_add_title")}</h2>
         <input
           className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
-          placeholder="Name"
+          placeholder={t("dash_bars_name_ph")}
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
         />
         <input
           className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
-          placeholder="Address"
+          placeholder={t("dash_bars_address_ph")}
           value={address}
           onChange={(e) => setAddress(e.target.value)}
           required
         />
         <textarea
           className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm min-h-[72px] text-zinc-100"
-          placeholder="Prize / notes"
+          placeholder={t("dash_bars_prize_ph")}
           value={prize}
           onChange={(e) => setPrize(e.target.value)}
         />
@@ -100,7 +102,7 @@ export default function DashboardBarsPage() {
           type="submit"
           className="rounded bg-amber-600/90 text-zinc-950 px-4 py-2 text-sm font-medium"
         >
-          Add
+          {t("dash_bars_add_btn")}
         </button>
       </form>
 
@@ -122,21 +124,21 @@ export default function DashboardBarsPage() {
                 b.active ? "text-emerald-500 text-xs" : "text-zinc-500 text-xs"
               }
             >
-              {b.active ? "active" : "inactive"}
+              {b.active ? t("dash_bars_active") : t("dash_bars_inactive")}
             </span>
             <button
               type="button"
               onClick={() => void toggleActive(b)}
               className="text-xs text-amber-500/90 hover:text-amber-400"
             >
-              Toggle active
+              {t("dash_bars_toggle")}
             </button>
             <button
               type="button"
               onClick={() => void removeBar(b.id)}
               className="text-xs text-red-400/90 hover:text-red-300"
             >
-              Delete
+              {t("dash_bars_delete")}
             </button>
           </li>
         ))}

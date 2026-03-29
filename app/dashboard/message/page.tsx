@@ -1,15 +1,19 @@
 "use client";
 
 import { useState } from "react";
+import { useI18n } from "@/lib/i18n/locale-context";
 
 export default function DashboardMessagePage() {
+  const { t } = useI18n();
   const [chatId, setChatId] = useState("");
   const [text, setText] = useState("");
-  const [msg, setMsg] = useState("");
+  const [notice, setNotice] = useState<
+    { kind: "ok" | "err"; text: string } | null
+  >(null);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setMsg("");
+    setNotice(null);
     const res = await fetch("/api/dashboard/message", {
       method: "POST",
       credentials: "include",
@@ -18,49 +22,48 @@ export default function DashboardMessagePage() {
     });
     if (!res.ok) {
       const j = (await res.json().catch(() => ({}))) as { error?: string };
-      setMsg(j.error ?? "Failed to send");
+      setNotice({ kind: "err", text: j.error ?? t("dash_msg_fail") });
       return;
     }
-    setMsg("Sent.");
+    setNotice({ kind: "ok", text: t("dash_msg_sent") });
     setText("");
   }
 
   return (
     <div className="space-y-4 max-w-lg">
-      <h1 className="text-xl text-zinc-100 font-medium">Send message</h1>
-      <p className="text-sm text-zinc-500">
-        Message a Telegram group that is playing one of your events (use their
-        chat ID).
-      </p>
+      <h1 className="text-xl text-zinc-100 font-medium">{t("dash_msg_title")}</h1>
+      <p className="text-sm text-zinc-500">{t("dash_msg_intro")}</p>
       <form onSubmit={(e) => void onSubmit(e)} className="space-y-3">
         <input
           className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
-          placeholder="Telegram chat ID"
+          placeholder={t("dash_msg_chat_ph")}
           value={chatId}
           onChange={(e) => setChatId(e.target.value)}
           required
         />
         <textarea
           className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm min-h-[100px] text-zinc-100"
-          placeholder="Message"
+          placeholder={t("dash_msg_text_ph")}
           value={text}
           onChange={(e) => setText(e.target.value)}
           required
         />
-        {msg ? (
+        {notice ? (
           <p
             className={
-              msg === "Sent." ? "text-sm text-emerald-400" : "text-sm text-red-400"
+              notice.kind === "ok"
+                ? "text-sm text-emerald-400"
+                : "text-sm text-red-400"
             }
           >
-            {msg}
+            {notice.text}
           </p>
         ) : null}
         <button
           type="submit"
           className="rounded bg-amber-600/90 text-zinc-950 px-4 py-2 text-sm font-medium"
         >
-          Send
+          {t("dash_msg_send")}
         </button>
       </form>
     </div>

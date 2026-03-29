@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 
 const bodySchema = z.object({
   query: z.string().min(1).max(500),
+  languageCode: z.enum(["de", "en"]).optional(),
 });
 
 export async function POST(request: Request) {
@@ -35,18 +36,19 @@ export async function POST(request: Request) {
   }
 
   const raw = parsed.data.query.trim();
+  const languageCode = parsed.data.languageCode ?? "de";
   try {
     const fromUrl = extractPlaceIdFromInput(raw);
     if (fromUrl) {
-      const place = await fetchPlaceDetails(fromUrl, key);
+      const place = await fetchPlaceDetails(fromUrl, key, languageCode);
       if (place) {
         return NextResponse.json({ mode: "single" as const, place });
       }
     }
 
-    const results = await textSearchPlaces(raw, key);
+    const results = await textSearchPlaces(raw, key, languageCode);
     if (results.length === 1) {
-      const place = await fetchPlaceDetails(results[0].place_id, key);
+      const place = await fetchPlaceDetails(results[0].place_id, key, languageCode);
       if (place) {
         return NextResponse.json({ mode: "single" as const, place });
       }

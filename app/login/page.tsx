@@ -4,19 +4,23 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { useI18n } from "@/lib/i18n/locale-context";
 
 function LoginForm() {
+  const { t } = useI18n();
   const searchParams = useSearchParams();
   const next = searchParams.get("next") ?? "/dashboard";
   const err = searchParams.get("error");
 
   const [email, setEmail] = useState("");
-  const [message, setMessage] = useState("");
+  const [feedback, setFeedback] = useState<
+    { kind: "success" | "error"; text: string } | null
+  >(null);
   const [loading, setLoading] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setMessage("");
+    setFeedback(null);
     setLoading(true);
     try {
       const supabase = createSupabaseBrowserClient();
@@ -28,24 +32,22 @@ function LoginForm() {
         },
       });
       if (error) {
-        setMessage(error.message);
+        setFeedback({ kind: "error", text: error.message });
         setLoading(false);
         return;
       }
-      setMessage("Check your email for the sign-in link.");
+      setFeedback({ kind: "success", text: t("login_success_email") });
     } catch {
-      setMessage("Something went wrong.");
+      setFeedback({ kind: "error", text: t("login_error_generic") });
     }
     setLoading(false);
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-zinc-950">
+    <div className="min-h-screen flex items-center justify-center p-6 pr-24 bg-zinc-950">
       <div className="w-full max-w-sm space-y-4 border border-zinc-800 rounded-lg p-6 bg-zinc-900/50">
-        <h1 className="text-lg text-zinc-200 font-medium">Sign in</h1>
-        <p className="text-sm text-zinc-500">
-          We will email you a magic link. No password.
-        </p>
+        <h1 className="text-lg text-zinc-200 font-medium">{t("login_title")}</h1>
+        <p className="text-sm text-zinc-500">{t("login_subtitle")}</p>
         <form onSubmit={(e) => void onSubmit(e)} className="space-y-3">
           <input
             type="email"
@@ -53,26 +55,24 @@ function LoginForm() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
+            placeholder={t("login_placeholder_email")}
             className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
           />
           {err === "auth" ? (
-            <p className="text-sm text-red-400">Sign-in failed. Try again.</p>
+            <p className="text-sm text-red-400">{t("login_error_auth")}</p>
           ) : null}
           {err === "profile" ? (
-            <p className="text-sm text-red-400">
-              Could not set up your profile. Contact support.
-            </p>
+            <p className="text-sm text-red-400">{t("login_error_profile")}</p>
           ) : null}
-          {message ? (
+          {feedback ? (
             <p
               className={
-                message.startsWith("Check")
+                feedback.kind === "success"
                   ? "text-sm text-emerald-400/90"
                   : "text-sm text-red-400"
               }
             >
-              {message}
+              {feedback.text}
             </p>
           ) : null}
           <button
@@ -80,12 +80,12 @@ function LoginForm() {
             disabled={loading}
             className="w-full rounded bg-amber-600/90 hover:bg-amber-500 text-zinc-950 py-2 text-sm font-medium disabled:opacity-50"
           >
-            {loading ? "…" : "Email me a link"}
+            {loading ? t("common_loading") : t("login_btn_submit")}
           </button>
         </form>
         <p className="text-xs text-zinc-600">
           <Link href="/" className="text-zinc-500 hover:text-zinc-300">
-            Back to home
+            {t("login_back_home")}
           </Link>
         </p>
       </div>
@@ -97,8 +97,8 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-zinc-500 text-sm">
-          Loading…
+        <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-zinc-500 text-sm pr-24">
+          …
         </div>
       }
     >

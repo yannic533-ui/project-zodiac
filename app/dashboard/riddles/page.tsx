@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useI18n } from "@/lib/i18n/locale-context";
 
 type Bar = { id: string; name: string };
 type Riddle = {
@@ -14,6 +15,7 @@ type Riddle = {
 };
 
 export default function DashboardRiddlesPage() {
+  const { t } = useI18n();
   const [bars, setBars] = useState<Bar[]>([]);
   const [riddles, setRiddles] = useState<Riddle[]>([]);
   const [barId, setBarId] = useState("");
@@ -79,7 +81,7 @@ export default function DashboardRiddlesPage() {
   }
 
   async function removeRiddle(id: string) {
-    if (!confirm("Delete riddle?")) return;
+    if (!confirm(t("dash_riddles_confirm_delete"))) return;
     await fetch(`/api/dashboard/riddles?id=${encodeURIComponent(id)}`, {
       method: "DELETE",
       credentials: "include",
@@ -91,13 +93,11 @@ export default function DashboardRiddlesPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-xl text-zinc-100 font-medium">My riddles</h1>
-      <p className="text-sm text-zinc-500">
-        Pick a bar, then add or review riddles. Difficulty 1–3 maps to easy → hard.
-      </p>
+      <h1 className="text-xl text-zinc-100 font-medium">{t("dash_riddles_title")}</h1>
+      <p className="text-sm text-zinc-500">{t("dash_riddles_intro")}</p>
 
       <div className="flex flex-wrap gap-3 items-center">
-        <label className="text-sm text-zinc-400">Bar</label>
+        <label className="text-sm text-zinc-400">{t("dash_riddles_bar_label")}</label>
         <select
           className="rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
           value={barId}
@@ -115,41 +115,41 @@ export default function DashboardRiddlesPage() {
         onSubmit={addRiddle}
         className="space-y-3 max-w-xl border border-zinc-800 rounded-lg p-4 bg-zinc-900/40"
       >
-        <h2 className="text-sm text-zinc-400">Add riddle</h2>
+        <h2 className="text-sm text-zinc-400">{t("dash_riddles_add_title")}</h2>
         <textarea
           className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm min-h-[64px] text-zinc-100"
-          placeholder="Question"
+          placeholder={t("dash_riddles_q_ph")}
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           required
         />
         <input
           className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
-          placeholder="Keywords, comma-separated"
+          placeholder={t("dash_riddles_kw_ph")}
           value={keywords}
           onChange={(e) => setKeywords(e.target.value)}
         />
         <div className="flex gap-2 items-center">
-          <label className="text-xs text-zinc-500">Difficulty</label>
+          <label className="text-xs text-zinc-500">{t("dash_riddles_diff_label")}</label>
           <select
             className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm text-zinc-100"
             value={difficulty}
             onChange={(e) => setDifficulty(Number(e.target.value))}
           >
-            <option value={1}>1 — easy</option>
-            <option value={2}>2 — medium</option>
-            <option value={3}>3 — hard</option>
+            <option value={1}>{t("dash_riddles_diff_1")}</option>
+            <option value={2}>{t("dash_riddles_diff_2")}</option>
+            <option value={3}>{t("dash_riddles_diff_3")}</option>
           </select>
         </div>
         <input
           className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
-          placeholder="Hint 1"
+          placeholder={t("dash_riddles_hint1_ph")}
           value={h1}
           onChange={(e) => setH1(e.target.value)}
         />
         <input
           className="w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
-          placeholder="Hint 2"
+          placeholder={t("dash_riddles_hint2_ph")}
           value={h2}
           onChange={(e) => setH2(e.target.value)}
         />
@@ -157,7 +157,7 @@ export default function DashboardRiddlesPage() {
           type="submit"
           className="rounded bg-amber-600/90 text-zinc-950 px-4 py-2 text-sm font-medium"
         >
-          Add
+          {t("dash_riddles_add_btn")}
         </button>
       </form>
 
@@ -168,18 +168,22 @@ export default function DashboardRiddlesPage() {
             className="border border-zinc-800 rounded-lg p-3 bg-zinc-900/30 text-sm"
           >
             <div className="text-xs text-zinc-500 mb-1">
-              {barName(r.bar_id)} · difficulty {r.difficulty}
+              {t("dash_riddles_list_meta", {
+                bar: barName(r.bar_id),
+                n: r.difficulty,
+              })}
             </div>
             <div className="text-zinc-200">{r.question}</div>
             <div className="text-xs text-zinc-500 mt-1">
-              Keywords: {r.answer_keywords.join(", ") || "—"}
+              {t("dash_riddles_kw_label")}{" "}
+              {r.answer_keywords.join(", ") || "—"}
             </div>
             <button
               type="button"
               className="text-xs text-red-400 mt-2"
               onClick={() => void removeRiddle(r.id)}
             >
-              Delete
+              {t("dash_riddles_delete")}
             </button>
           </li>
         ))}
