@@ -53,18 +53,6 @@ function isWebSearchRelatedApiError(err: unknown): boolean {
     return true;
   }
 
-  if (
-    text.includes("tool") &&
-    (text.includes("not supported") ||
-      text.includes("unsupported") ||
-      text.includes("not available") ||
-      text.includes("invalid") ||
-      text.includes("unknown tool") ||
-      text.includes("disabled"))
-  ) {
-    return true;
-  }
-
   return false;
 }
 
