@@ -883,7 +883,7 @@ export default function OnboardingPage() {
               if (m.role === "user" && m.kind === "text") {
                 const ut = m.text;
                 return (
-                  <div key={m.id} className="flex justify-end w-full">
+                  <div key={m.id} className="onb-msg-enter flex justify-end w-full">
                     <div
                       className="max-w-[80%] text-white bg-black"
                       style={{
@@ -901,7 +901,7 @@ export default function OnboardingPage() {
 
               if (m.role === "agent" && m.kind === "text") {
                 return (
-                  <div key={m.id} className="flex justify-start w-full">
+                  <div key={m.id} className="onb-msg-enter flex justify-start w-full">
                     <p
                       className="max-w-[80%]"
                       style={{
@@ -920,7 +920,7 @@ export default function OnboardingPage() {
               if (m.role === "agent" && m.kind === "place_card") {
                 const src = photoUrl(m.place);
                 return (
-                  <div key={m.id} className="flex justify-start w-full">
+                  <div key={m.id} className="onb-msg-enter flex justify-start w-full">
                     <div className="max-w-[80%] space-y-2">
                       {src ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -962,7 +962,7 @@ export default function OnboardingPage() {
                 const r = m.riddle;
                 const editing = editRiddle[r.difficulty] ?? false;
                 return (
-                  <div key={m.id} className="flex justify-start w-full">
+                  <div key={m.id} className="onb-msg-enter flex justify-start w-full">
                     <div className="max-w-[80%] w-full space-y-2">
                       <p
                         style={{
@@ -1096,7 +1096,7 @@ export default function OnboardingPage() {
                 return (
                   <div
                     key={m.id}
-                    className="flex flex-col items-center w-full gap-3"
+                    className="onb-msg-enter flex flex-col items-center w-full gap-3"
                   >
                     <button
                       type="button"
@@ -1142,7 +1142,7 @@ export default function OnboardingPage() {
                 return (
                   <div
                     key={m.id}
-                    className="flex flex-col items-center w-full gap-3"
+                    className="onb-msg-enter flex flex-col items-center w-full gap-3"
                   >
                     <button
                       type="button"
@@ -1189,7 +1189,7 @@ export default function OnboardingPage() {
                 return (
                   <div
                     key={m.id}
-                    className="flex flex-col items-center w-full gap-2"
+                    className="onb-msg-enter flex flex-col items-center w-full gap-2"
                   >
                     {m.items.map((item, si) => (
                       <button
@@ -1233,7 +1233,7 @@ export default function OnboardingPage() {
                 {searchPanel.mode === "list" &&
                 searchPanel.candidates.length === 0 ? (
                   <p
-                    className="text-center"
+                    className="onb-msg-enter text-center"
                     style={{ fontSize: 13, color: "#666", margin: 0 }}
                   >
                     {copy.noHits}
@@ -1245,7 +1245,7 @@ export default function OnboardingPage() {
                         key={c.place_id}
                         type="button"
                         disabled={loading}
-                        className="bg-white cursor-pointer disabled:opacity-50 text-center w-full"
+                        className="onb-msg-enter bg-white cursor-pointer disabled:opacity-50 text-center w-full"
                         style={{
                           border: "0.5px solid #e8e8e8",
                           borderRadius: 0,
@@ -1285,7 +1285,7 @@ export default function OnboardingPage() {
                   <button
                     type="button"
                     disabled={loading}
-                    className="bg-white cursor-pointer disabled:opacity-50 text-center w-full"
+                    className="onb-msg-enter bg-white cursor-pointer disabled:opacity-50 text-center w-full"
                     style={{
                       border: "0.5px solid #e8e8e8",
                       borderRadius: 0,
@@ -1331,7 +1331,7 @@ export default function OnboardingPage() {
 
             {chipsLoading && phase === "qa" ? (
               <p
-                className="text-center"
+                className="onb-msg-enter text-center"
                 style={{ fontSize: 13, color: "#666", margin: 0 }}
               >
                 {t("common_loading")}
@@ -1339,10 +1339,10 @@ export default function OnboardingPage() {
             ) : null}
 
             {typing ? (
-              <div className="flex justify-start gap-0.5" aria-hidden>
-                <span className="onb-dot" />
-                <span className="onb-dot" />
-                <span className="onb-dot" />
+              <div className="flex justify-start gap-1" aria-hidden>
+                <span className="onb-typing-dot onb-typing-dot--1" />
+                <span className="onb-typing-dot onb-typing-dot--2" />
+                <span className="onb-typing-dot onb-typing-dot--3" />
               </div>
             ) : null}
           </div>
@@ -1490,32 +1490,6 @@ export default function OnboardingPage() {
           ) : null}
         </div>
       )}
-
-      <style jsx global>{`
-        @keyframes onb-dot-pulse {
-          0%,
-          60%,
-          100% {
-            opacity: 0.25;
-          }
-          30% {
-            opacity: 1;
-          }
-        }
-        .onb-dot {
-          width: 5px;
-          height: 5px;
-          border-radius: 50%;
-          background: #000;
-          animation: onb-dot-pulse 1s ease-in-out infinite;
-        }
-        .onb-dot:nth-child(2) {
-          animation-delay: 0.2s;
-        }
-        .onb-dot:nth-child(3) {
-          animation-delay: 0.4s;
-        }
-      `}</style>
     </div>
   );
 }

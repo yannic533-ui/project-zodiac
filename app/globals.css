@@ -22,6 +22,51 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+@keyframes onb-msg-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.onb-msg-enter {
+  animation: onb-msg-enter 200ms ease-out forwards;
+}
+
+@keyframes onb-typing-dot {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.onb-typing-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #000;
+  animation: onb-typing-dot 900ms ease-in-out infinite;
+}
+
+.onb-typing-dot--1 {
+  animation-delay: 0ms;
+}
+
+.onb-typing-dot--2 {
+  animation-delay: 150ms;
+}
+
+.onb-typing-dot--3 {
+  animation-delay: 300ms;
+}
+
 @layer utilities {
   .swiss-border {
     border: 0.5px solid #e8e8e8;
