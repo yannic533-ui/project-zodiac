@@ -36,6 +36,13 @@ const SYSTEM = `You help bar owners create short riddles for a real-world scaven
 Players visit the bar in person; riddles must be solvable on site (no obscure trivia).
 Return ONLY valid JSON, no markdown fences.
 
+Generate all riddles in German. Always. If the owner's notes explicitly ask for another language, follow that exception only for that request.
+
+CRITICAL: Never mention the bar's proper name in any riddle (question, hints, or keywords).
+The riddle must work as a mystery — players must discover the bar themselves.
+Instead of "Stereo opens at 18:00", write "Diese Bar öffnet um 18:00 — aber welche?"
+Reference the street, neighbourhood, interior details, atmosphere — never the venue name.
+
 Tone: grounded, clever, not corny. Hints nudge without giving away the answer.
 answer_keywords: 3–8 short phrases or words that count as correct (synonyms OK).`;
 
@@ -84,6 +91,7 @@ export async function generateOnboardingRiddlePack(
 
   const user = `Bar context (facts + owner notes):\n${barContext}\n\nCreate exactly 3 riddles: difficulty 1 = easy, 2 = medium, 3 = hard.
 Each riddle must be distinct and about this specific bar or what you would notice there.
+Write everything in German unless the owner notes explicitly request another language.
 
 Return ONLY this JSON shape:
 {"riddles":[
@@ -146,6 +154,7 @@ export async function regenerateOnboardingRiddle(params: {
   });
 
   const user = `Bar context:\n${params.barContext}\n\nOther riddles already approved (do not copy):\n${params.keepSummary}\n\nRegenerate ONLY the riddle with difficulty ${params.difficulty} (${params.difficulty === 1 ? "easy" : params.difficulty === 2 ? "medium" : "hard"}).
+Output in German unless the owner notes explicitly request another language. Never use the bar's proper name in the riddle text.
 
 Return ONLY this JSON shape:
 {"question":"...","answer_keywords":["..."],"hint_1":"...","hint_2":"...","difficulty":${params.difficulty}}`;

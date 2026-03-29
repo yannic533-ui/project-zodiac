@@ -29,12 +29,6 @@ type UserTextMsg = BaseMsg & { role: "user"; kind: "text"; text: string };
 
 type AgentTextMsg = BaseMsg & { role: "agent"; kind: "text"; text: string };
 
-type PlaceCardMsg = BaseMsg & {
-  role: "agent";
-  kind: "place_card";
-  place: PlaceDetailsResult;
-};
-
 type SearchResultsMsg = BaseMsg & {
   role: "ui";
   kind: "search_results";
@@ -66,7 +60,6 @@ type ConfirmBarMsg = BaseMsg & {
 type ChatMessage =
   | UserTextMsg
   | AgentTextMsg
-  | PlaceCardMsg
   | SearchResultsMsg
   | SuggestionsMsg
   | RiddleMsg
@@ -626,7 +619,6 @@ export default function OnboardingPage() {
       setSearchPanel(null);
       appendMessages(
         [
-          { id: uid(), role: "agent", kind: "place_card", place: p },
           { id: uid(), role: "agent", kind: "text", text: copy.confirm },
           { id: uid(), role: "ui", kind: "confirm_bar" },
         ],
@@ -1097,12 +1089,25 @@ export default function OnboardingPage() {
 
   const chatBodyStyle: CSSProperties = {
     flex: 1,
+    minHeight: 0,
     overflowY: "auto",
     overflowX: "hidden",
     overscrollBehavior: "contain",
     padding: "24px 16px 16px",
     scrollBehavior: "smooth",
-    minHeight: 0,
+  };
+
+  const progressBarStyle: CSSProperties = {
+    height: 2,
+    flexShrink: 0,
+    background: "#e8e8e8",
+    zIndex: 10,
+  };
+
+  const barHeaderStyle: CSSProperties = {
+    flexShrink: 0,
+    width: "100%",
+    borderBottom: "0.5px solid #e8e8e8",
   };
 
   const inputAreaStyle: CSSProperties = {
@@ -1113,20 +1118,11 @@ export default function OnboardingPage() {
     background: "#fff",
   };
 
+  const barHeaderPhotoSrc = place ? photoUrl(place) : null;
+
   return (
     <div className="onb-shell text-black" style={shellStyle}>
-      <div
-        aria-hidden
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 1,
-          zIndex: 10,
-          background: "#e8e8e8",
-        }}
-      >
+      <div aria-hidden style={progressBarStyle}>
         <div
           style={{
             height: "100%",
@@ -1136,6 +1132,81 @@ export default function OnboardingPage() {
           }}
         />
       </div>
+
+      {place ? (
+        <div style={barHeaderStyle}>
+          {barHeaderPhotoSrc ? (
+            <div
+              className="relative w-full overflow-hidden"
+              style={{ height: 120 }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={barHeaderPhotoSrc}
+                alt=""
+                className="w-full h-full object-cover block"
+                style={{ objectPosition: "center" }}
+              />
+              <div
+                className="absolute left-0 bottom-0 right-0 pointer-events-none"
+                style={{
+                  padding: "12px 12px 10px",
+                  background:
+                    "linear-gradient(to top, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.2) 55%, transparent 100%)",
+                }}
+              >
+                <p
+                  style={{
+                    color: "#fff",
+                    fontSize: 14,
+                    fontWeight: 500,
+                    margin: 0,
+                    lineHeight: 1.35,
+                    textAlign: "left",
+                  }}
+                >
+                  {place.name}
+                </p>
+                <p
+                  style={{
+                    color: "rgba(255,255,255,0.7)",
+                    fontSize: 11,
+                    margin: "4px 0 0",
+                    lineHeight: 1.35,
+                    textAlign: "left",
+                  }}
+                >
+                  {place.formatted_address}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div style={{ padding: "12px 16px" }}>
+              <p
+                style={{
+                  fontSize: 14,
+                  fontWeight: 500,
+                  margin: 0,
+                  lineHeight: 1.35,
+                  color: "#000",
+                }}
+              >
+                {place.name}
+              </p>
+              <p
+                style={{
+                  fontSize: 11,
+                  margin: "4px 0 0",
+                  lineHeight: 1.35,
+                  color: "rgba(0,0,0,0.55)",
+                }}
+              >
+                {place.formatted_address}
+              </p>
+            </div>
+          )}
+        </div>
+      ) : null}
 
       <div ref={chatBodyRef} className="onb-chat-body" style={chatBodyStyle}>
         <div className="flex flex-col" style={{ gap: 12 }}>
@@ -1173,82 +1244,6 @@ export default function OnboardingPage() {
                       }}
                       onRevealTick={bumpScroll}
                     />
-                  </div>
-                );
-              }
-
-              if (m.role === "agent" && m.kind === "place_card") {
-                const src = photoUrl(m.place);
-                return (
-                  <div key={m.id} className="onb-msg-enter flex justify-start w-full">
-                    <div className="max-w-[80%] w-full space-y-2">
-                      {src ? (
-                        <div
-                          className="relative w-full overflow-hidden"
-                          style={{ border: "0.5px solid #e8e8e8" }}
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={src}
-                            alt=""
-                            className="w-full max-h-48 object-cover block"
-                          />
-                          <div
-                            className="absolute inset-x-0 bottom-0 left-0 right-0 pointer-events-none"
-                            style={{
-                              padding: "16px 12px 10px",
-                              background:
-                                "linear-gradient(to top, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.2) 55%, transparent 100%)",
-                            }}
-                          >
-                            <p
-                              style={{
-                                color: "#fff",
-                                fontSize: 14,
-                                fontWeight: 500,
-                                margin: 0,
-                                lineHeight: 1.35,
-                              }}
-                            >
-                              {m.place.name}
-                            </p>
-                            <p
-                              style={{
-                                color: "rgba(255,255,255,0.7)",
-                                fontSize: 11,
-                                margin: "4px 0 0",
-                                lineHeight: 1.35,
-                              }}
-                            >
-                              {m.place.formatted_address}
-                            </p>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <p
-                            style={{
-                              fontSize: 15,
-                              lineHeight: 1.6,
-                              color: "#000",
-                              margin: 0,
-                            }}
-                          >
-                            {m.place.name}
-                          </p>
-                          <p
-                            style={{
-                              fontSize: 13,
-                              lineHeight: 1.5,
-                              color: "#666",
-                              margin: 0,
-                            }}
-                          >
-                            {m.place.formatted_address}
-                          </p>
-                        </>
-                      )}
-                    </div>
                   </div>
                 );
               }
