@@ -57,7 +57,7 @@ export default function Home() {
 
           <div className="mt-10 flex flex-wrap gap-4">
             <Link
-              href="/login"
+              href="/onboarding"
               className="inline-flex items-center justify-center bg-black text-white border-0"
               style={{
                 padding: "14px 24px",
@@ -65,7 +65,7 @@ export default function Home() {
                 fontWeight: 500,
               }}
             >
-              {t("home_cta_signin")}
+              {locale === "de" ? "Bar hinzufügen →" : "Add your bar →"}
             </Link>
             <Link
               href="/login?next=/admin"

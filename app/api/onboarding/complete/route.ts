@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { buildPrizeDescription, type OnboardingQa } from "@/lib/onboarding-context";
 import type { PlaceDetailsResult } from "@/lib/google-places";
 
@@ -86,7 +87,9 @@ export async function POST(request: Request) {
     parsed.data.prize_description?.trim() ??
     buildPrizeDescription({ place, qa });
 
-  const { data: bar, error: barErr } = await supabase
+  const admin = createAdminClient();
+
+  const { data: bar, error: barErr } = await admin
     .from("bars")
     .insert({
       name,
@@ -117,10 +120,10 @@ export async function POST(request: Request) {
     hint_2: r.hint_2 ?? "",
   }));
 
-  const { error: rErr } = await supabase.from("riddles").insert(rows);
+  const { error: rErr } = await admin.from("riddles").insert(rows);
   if (rErr) {
     console.error(rErr);
-    await supabase.from("bars").delete().eq("id", barId);
+    await admin.from("bars").delete().eq("id", barId);
     return NextResponse.json({ error: rErr.message }, { status: 500 });
   }
 

@@ -23,26 +23,6 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  if (pathname.startsWith("/api/places")) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    return response;
-  }
-
-  if (pathname.startsWith("/api/onboarding")) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    return response;
-  }
-
   if (pathname.startsWith("/api/dashboard")) {
     const {
       data: { user },
@@ -114,7 +94,7 @@ export async function middleware(request: NextRequest) {
     return redirect(request, "/admin/login");
   }
 
-  const protectedPrefixes = ["/dashboard", "/onboarding"];
+  const protectedPrefixes = ["/dashboard"];
   const needsAuth = protectedPrefixes.some((p) => pathname.startsWith(p));
 
   if (needsAuth) {

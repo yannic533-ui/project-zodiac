@@ -1,8 +1,9 @@
 "use client";
 
-import type { ChangeEvent, CSSProperties } from "react";
+import type { ChangeEvent, CSSProperties, FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
   extractPlaceIdFromInput,
   placePhotoProxyUrl,
@@ -21,6 +22,7 @@ type ChatPhase =
   | "qa"
   | "generating"
   | "review_riddles"
+  | "sign_in"
   | "done";
 
 type BaseMsg = { id: string };
@@ -57,6 +59,11 @@ type ConfirmBarMsg = BaseMsg & {
   kind: "confirm_bar";
 };
 
+type SignInEmailUiMsg = BaseMsg & {
+  role: "ui";
+  kind: "sign_in_email";
+};
+
 type ChatMessage =
   | UserTextMsg
   | AgentTextMsg
@@ -64,7 +71,8 @@ type ChatMessage =
   | SuggestionsMsg
   | RiddleMsg
   | ReviewPromptMsg
-  | ConfirmBarMsg;
+  | ConfirmBarMsg
+  | SignInEmailUiMsg;
 
 const TELEGRAM_LINK =
   process.env.NEXT_PUBLIC_TELEGRAM_BOT_LINK ?? "https://t.me/";
@@ -257,6 +265,37 @@ function buildQaFromNotes(notes: string[]): OnboardingQa {
   return { special: notes.join("\n\n") };
 }
 
+const PENDING_ONBOARDING_KEY = "schnuffis_pending_onboarding";
+
+function buildPendingOnboardingJson(
+  place: PlaceDetailsResult,
+  riddles: OnboardingRiddleDraft[],
+  locale: "de" | "en",
+  qa: OnboardingQa,
+  photoSrc: string | null
+): string {
+  const description = place.editorial_summary?.overview ?? "";
+  return JSON.stringify({
+    place: {
+      name: place.name,
+      address: place.formatted_address ?? "",
+      description,
+      website: place.website ?? "",
+      placeId: place.place_id,
+      photoUrl: photoSrc ?? "",
+    },
+    riddles: riddles.map((r) => ({
+      question: r.question,
+      answer_keywords: r.answer_keywords,
+      difficulty: r.difficulty,
+      hint_1: r.hint_1,
+      hint_2: r.hint_2,
+    })),
+    locale,
+    qa,
+  });
+}
+
 function pickThreeSuggestions(
   chips: Record<OnboardingQaKey, string[]> | null
 ): string[] {
@@ -308,6 +347,10 @@ export default function OnboardingPage() {
             bearbeiten: "Bearbeiten",
             noHits: "Keine Treffer.",
             searchAgain: "Welche Bar möchtest du hinzufügen?",
+            signInPrompt:
+              "Fast fertig. Melde dich an um deine Bar zu aktivieren.",
+            magicLinkBtn: "Link per E-Mail senden",
+            checkInbox: "Schau in dein Postfach.",
           }
         : {
             open: "Which bar do you want to add?",
@@ -329,6 +372,9 @@ export default function OnboardingPage() {
             bearbeiten: "Edit",
             noHits: "No results.",
             searchAgain: "Which bar do you want to add?",
+            signInPrompt: "Almost done. Sign in to activate your bar.",
+            magicLinkBtn: "Send magic link",
+            checkInbox: "Check your inbox.",
           },
     [lc]
   );
@@ -361,6 +407,9 @@ export default function OnboardingPage() {
   const [firstQaMessageSent, setFirstQaMessageSent] = useState(false);
   /** Suggestion chips only after opening QA agent message is shown */
   const [qaReadyForSuggestions, setQaReadyForSuggestions] = useState(false);
+  const [magicEmail, setMagicEmail] = useState("");
+  const [magicSending, setMagicSending] = useState(false);
+  const [magicSent, setMagicSent] = useState(false);
 
   const searchAbortRef = useRef<AbortController | null>(null);
   const searchSeqRef = useRef(0);
@@ -890,32 +939,74 @@ export default function OnboardingPage() {
     }
   }
 
-  async function completeSave() {
+  async function onLooksGood() {
     if (!place || !riddles?.length) return;
     setErr("");
     setSaving(true);
     try {
-      const res = await fetch("/api/onboarding/complete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          place,
-          qa,
-          name: place.name,
-          address: place.formatted_address,
-          riddles,
-        }),
-      });
-      const j = (await res.json()) as { error?: string; ok?: boolean };
-      if (!res.ok) {
-        setErr(j.error ?? t("ob_err_save"));
-        setSaving(false);
+      const supabase = createSupabaseBrowserClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const photoSrc = photoUrl(place);
+      const pendingJson = buildPendingOnboardingJson(
+        place,
+        riddles,
+        lc,
+        qa,
+        photoSrc
+      );
+
+      if (user) {
+        const res = await fetch("/api/onboarding/complete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            place,
+            qa,
+            name: place.name,
+            address: place.formatted_address,
+            riddles,
+          }),
+        });
+        const j = (await res.json()) as { error?: string; ok?: boolean };
+        if (!res.ok) {
+          setErr(j.error ?? t("ob_err_save"));
+          return;
+        }
+        try {
+          sessionStorage.removeItem(PENDING_ONBOARDING_KEY);
+        } catch {
+          /* ignore */
+        }
+        setProgressPct(100);
+        setPhase("done");
+        await delay(400);
+        await agentSay(() =>
+          appendMessages(
+            [
+              {
+                id: uid(),
+                role: "agent",
+                kind: "text",
+                text: copy.live(place.name),
+              },
+            ],
+            false
+          )
+        );
         return;
       }
+
+      try {
+        sessionStorage.setItem(PENDING_ONBOARDING_KEY, pendingJson);
+      } catch {
+        setErr(t("ob_err_network"));
+        return;
+      }
+
       setProgressPct(100);
-      setPhase("done");
-      await delay(400);
       await agentSay(() =>
         appendMessages(
           [
@@ -923,16 +1014,62 @@ export default function OnboardingPage() {
               id: uid(),
               role: "agent",
               kind: "text",
-              text: copy.live(place.name),
+              text: copy.signInPrompt,
             },
           ],
           false
         )
       );
+      appendMessages(
+        [{ id: uid(), role: "ui", kind: "sign_in_email" }],
+        false
+      );
+      setPhase("sign_in");
+      requestAnimationFrame(() => scrollToBottom(true));
     } catch {
       setErr(t("ob_err_network"));
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
+  }
+
+  async function submitMagicLink(e: FormEvent) {
+    e.preventDefault();
+    const email = magicEmail.trim();
+    if (!email || magicSending || magicSent) return;
+    setErr("");
+    setMagicSending(true);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const origin = window.location.origin;
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent("/onboarding/complete")}`,
+        },
+      });
+      if (error) {
+        setErr(error.message);
+        return;
+      }
+      setMagicSent(true);
+      appendMessages(
+        [
+          {
+            id: uid(),
+            role: "agent",
+            kind: "text",
+            text: copy.checkInbox,
+          },
+        ],
+        false
+      );
+      requestAnimationFrame(() => scrollToBottom(true));
+    } catch {
+      setErr(t("ob_err_network"));
+    } finally {
+      setMagicSending(false);
+    }
   }
 
   async function onRegenerateAllRiddles() {
@@ -1058,6 +1195,7 @@ export default function OnboardingPage() {
     phase === "confirm_bar" ||
     phase === "generating" ||
     phase === "review_riddles" ||
+    phase === "sign_in" ||
     phase === "done" ||
     loading ||
     saving ||
@@ -1343,46 +1481,49 @@ export default function OnboardingPage() {
                           {r.question}
                         </p>
                       )}
-                      <div className="flex gap-4 pt-1">
-                        <button
-                          type="button"
-                          disabled={loading}
-                          className="bg-transparent border-0 cursor-pointer disabled:opacity-50 p-0"
-                          style={{
-                            fontSize: 12,
-                            color: "#666",
-                            fontWeight: 300,
-                            touchAction: "manipulation",
-                          }}
-                          onClick={() => void regenOne(r.difficulty)}
-                        >
-                          {copy.neu}
-                        </button>
-                        <button
-                          type="button"
-                          className="bg-transparent border-0 cursor-pointer p-0"
-                          style={{
-                            fontSize: 12,
-                            color: "#666",
-                            fontWeight: 300,
-                            touchAction: "manipulation",
-                          }}
-                          onClick={() =>
-                            setEditRiddle((prev) => ({
-                              ...prev,
-                              [r.difficulty]: !editing,
-                            }))
-                          }
-                        >
-                          {copy.bearbeiten}
-                        </button>
-                      </div>
+                      {phase === "review_riddles" ? (
+                        <div className="flex gap-4 pt-1">
+                          <button
+                            type="button"
+                            disabled={loading}
+                            className="bg-transparent border-0 cursor-pointer disabled:opacity-50 p-0"
+                            style={{
+                              fontSize: 12,
+                              color: "#666",
+                              fontWeight: 300,
+                              touchAction: "manipulation",
+                            }}
+                            onClick={() => void regenOne(r.difficulty)}
+                          >
+                            {copy.neu}
+                          </button>
+                          <button
+                            type="button"
+                            className="bg-transparent border-0 cursor-pointer p-0"
+                            style={{
+                              fontSize: 12,
+                              color: "#666",
+                              fontWeight: 300,
+                              touchAction: "manipulation",
+                            }}
+                            onClick={() =>
+                              setEditRiddle((prev) => ({
+                                ...prev,
+                                [r.difficulty]: !editing,
+                              }))
+                            }
+                          >
+                            {copy.bearbeiten}
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 );
               }
 
               if (m.role === "agent" && m.kind === "review_prompt") {
+                if (phase !== "review_riddles") return null;
                 return (
                   <div
                     key={m.id}
@@ -1402,7 +1543,7 @@ export default function OnboardingPage() {
                         maxWidth: "80%",
                         touchAction: "manipulation",
                       }}
-                      onClick={() => void completeSave()}
+                      onClick={() => void onLooksGood()}
                     >
                       {copy.looksGood}
                     </button>
@@ -1472,6 +1613,49 @@ export default function OnboardingPage() {
                       {copy.otherBar}
                     </button>
                   </div>
+                );
+              }
+
+              if (m.role === "ui" && m.kind === "sign_in_email") {
+                if (phase !== "sign_in") return null;
+                return (
+                  <form
+                    key={m.id}
+                    className="onb-msg-enter w-full flex flex-col gap-3"
+                    onSubmit={(e) => void submitMagicLink(e)}
+                  >
+                    <input
+                      type="email"
+                      autoComplete="email"
+                      required
+                      disabled={magicSent || magicSending}
+                      value={magicEmail}
+                      onChange={(e) => setMagicEmail(e.target.value)}
+                      className="w-full bg-white outline-none"
+                      style={{
+                        border: "0.5px solid #000",
+                        padding: "12px 14px",
+                        fontSize: 16,
+                        fontWeight: 300,
+                      }}
+                      placeholder=""
+                    />
+                    <button
+                      type="submit"
+                      disabled={magicSent || magicSending}
+                      className="w-full bg-black text-white border-0 cursor-pointer disabled:opacity-50"
+                      style={{
+                        padding: "12px 14px",
+                        fontSize: 14,
+                        fontWeight: 300,
+                        touchAction: "manipulation",
+                      }}
+                    >
+                      {magicSending
+                        ? t("common_loading")
+                        : copy.magicLinkBtn}
+                    </button>
+                  </form>
                 );
               }
 
@@ -1666,6 +1850,14 @@ export default function OnboardingPage() {
           >
             {copy.dashboard}
           </button>
+        </div>
+      ) : phase === "sign_in" ? (
+        <div style={inputAreaStyle}>
+          {err ? (
+            <p style={{ fontSize: 12, color: "#999", margin: "0 0 8px" }}>
+              {err}
+            </p>
+          ) : null}
         </div>
       ) : (
         <div style={inputAreaStyle}>
