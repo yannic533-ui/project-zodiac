@@ -1,9 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { placePhotoProxyUrl, type PlaceDetailsResult } from "@/lib/google-places";
+import {
+  extractPlaceIdFromInput,
+  placePhotoProxyUrl,
+  type PlaceDetailsResult,
+} from "@/lib/google-places";
 import type { OnboardingQa } from "@/lib/onboarding-context";
 import type { OnboardingRiddleDraft } from "@/lib/onboarding-riddles";
 import { useI18n } from "@/lib/i18n/locale-context";
@@ -28,9 +32,18 @@ export default function OnboardingPage() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [searchBusy, setSearchBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [candidates, setCandidates] = useState<Candidate[] | null>(null);
+  const [searchPanel, setSearchPanel] = useState<
+    | { mode: "list"; candidates: Candidate[] }
+    | { mode: "single"; place: PlaceDetailsResult }
+    | null
+  >(null);
+  const [searchMenuOpen, setSearchMenuOpen] = useState(false);
   const [place, setPlace] = useState<PlaceDetailsResult | null>(null);
+  const committedQueryRef = useRef<string | null>(null);
+  const searchAbortRef = useRef<AbortController | null>(null);
+  const searchSeqRef = useRef(0);
   const [editName, setEditName] = useState("");
   const [editAddress, setEditAddress] = useState("");
   const [editDesc, setEditDesc] = useState("");
@@ -39,8 +52,26 @@ export default function OnboardingPage() {
   const [qa, setQa] = useState<OnboardingQa>({});
   const [riddles, setRiddles] = useState<OnboardingRiddleDraft[] | null>(null);
   const [saving, setSaving] = useState(false);
+  const [smartChips, setSmartChips] = useState<Record<
+    OnboardingQaKey,
+    string[]
+  > | null>(null);
+  const [chipsLoading, setChipsLoading] = useState(false);
 
   const chips = QA_CHIPS[locale];
+
+  const placeForSuggestions = useMemo((): PlaceDetailsResult | null => {
+    if (!place) return null;
+    return {
+      ...place,
+      name: editName.trim() || place.name,
+      formatted_address: editAddress.trim() || place.formatted_address,
+      website: editWebsite.trim() || place.website,
+      editorial_summary: editDesc.trim()
+        ? { overview: editDesc.trim() }
+        : place.editorial_summary,
+    };
+  }, [place, editName, editAddress, editWebsite, editDesc]);
 
   const photoUrl = useMemo(() => {
     const ref = place?.photos?.[0]?.photo_reference;
@@ -51,44 +82,126 @@ export default function OnboardingPage() {
   const stepLabel =
     step === 1 ? t("ob_step1_label") : step === 2 ? t("ob_step2_label") : t("ob_step3_label");
 
-  async function runSearch() {
-    setErr("");
-    setCandidates(null);
-    setLoading(true);
-    try {
-      const res = await fetch("/api/places/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ query, languageCode: locale }),
-      });
-      const j = (await res.json()) as
-        | { mode: "single"; place: PlaceDetailsResult }
-        | { mode: "list"; candidates: Candidate[] }
-        | { error?: string };
-      if (!res.ok) {
-        setErr((j as { error?: string }).error ?? t("ob_err_search"));
-        setLoading(false);
-        return;
-      }
-      if ((j as { mode: string }).mode === "single") {
-        const p = (j as { place: PlaceDetailsResult }).place;
-        setPlace(p);
-        setEditName(p.name);
-        setEditAddress(p.formatted_address);
-        setEditDesc(p.editorial_summary?.overview ?? "");
-        setEditWebsite(p.website ?? "");
-        setEditPhone(p.formatted_phone_number ?? p.international_phone_number ?? "");
-        setCandidates(null);
-      } else {
-        setCandidates((j as { candidates: Candidate[] }).candidates ?? []);
-        setPlace(null);
-      }
-    } catch {
-      setErr(t("ob_err_network"));
-    }
-    setLoading(false);
+  function applyPlaceDetails(p: PlaceDetailsResult) {
+    setPlace(p);
+    setEditName(p.name);
+    setEditAddress(p.formatted_address);
+    setEditDesc(p.editorial_summary?.overview ?? "");
+    setEditWebsite(p.website ?? "");
+    setEditPhone(p.formatted_phone_number ?? p.international_phone_number ?? "");
+    setSearchPanel(null);
+    setSearchMenuOpen(false);
+    committedQueryRef.current = p.name;
+    setQuery(p.name);
   }
+
+  useEffect(() => {
+    const q = query.trim();
+    const fromUrl = extractPlaceIdFromInput(q);
+    if (q.length < 3 && !fromUrl) {
+      searchSeqRef.current += 1;
+      searchAbortRef.current?.abort();
+      searchAbortRef.current = null;
+      setSearchPanel(null);
+      setSearchMenuOpen(false);
+      setSearchBusy(false);
+      return;
+    }
+
+    const mySeq = ++searchSeqRef.current;
+    const timer = window.setTimeout(() => {
+      searchAbortRef.current?.abort();
+      const ac = new AbortController();
+      searchAbortRef.current = ac;
+      setErr("");
+      setSearchBusy(true);
+      void (async () => {
+        try {
+          const res = await fetch("/api/places/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ query: q, languageCode: locale }),
+            signal: ac.signal,
+          });
+          const j = (await res.json()) as
+            | { mode: "single"; place: PlaceDetailsResult }
+            | { mode: "list"; candidates: Candidate[] }
+            | { error?: string };
+          if (searchSeqRef.current !== mySeq) return;
+          if (!res.ok) {
+            setErr((j as { error?: string }).error ?? t("ob_err_search"));
+            setSearchPanel(null);
+            setSearchMenuOpen(false);
+            return;
+          }
+          if ((j as { mode: string }).mode === "single") {
+            setSearchPanel({
+              mode: "single",
+              place: (j as { place: PlaceDetailsResult }).place,
+            });
+          } else {
+            setSearchPanel({
+              mode: "list",
+              candidates: (j as { candidates: Candidate[] }).candidates ?? [],
+            });
+          }
+          setSearchMenuOpen(true);
+        } catch (e) {
+          if (e instanceof DOMException && e.name === "AbortError") return;
+          if (searchSeqRef.current !== mySeq) return;
+          setErr(t("ob_err_network"));
+          setSearchPanel(null);
+        } finally {
+          if (searchSeqRef.current === mySeq) setSearchBusy(false);
+        }
+      })();
+    }, 400);
+
+    return () => {
+      window.clearTimeout(timer);
+      searchAbortRef.current?.abort();
+      searchAbortRef.current = null;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t() omitted to avoid refetch loops on context churn
+  }, [query, locale]);
+
+  useEffect(() => {
+    if (step !== 2 || !placeForSuggestions) return;
+    let cancelled = false;
+    setChipsLoading(true);
+    setSmartChips(null);
+    void (async () => {
+      try {
+        const res = await fetch("/api/onboarding/suggestions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            place: placeForSuggestions,
+            languageCode: locale,
+          }),
+        });
+        const j = (await res.json()) as {
+          chips?: Record<OnboardingQaKey, string[]>;
+          error?: string;
+        };
+        if (cancelled) return;
+        if (!res.ok) {
+          setSmartChips(null);
+          return;
+        }
+        setSmartChips(j.chips ?? null);
+      } catch {
+        if (!cancelled) setSmartChips(null);
+      } finally {
+        if (!cancelled) setChipsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [step, placeForSuggestions, locale]);
 
   async function pickCandidate(c: Candidate) {
     setErr("");
@@ -105,15 +218,7 @@ export default function OnboardingPage() {
         return;
       }
       if (j.place) {
-        setPlace(j.place);
-        setEditName(j.place.name);
-        setEditAddress(j.place.formatted_address);
-        setEditDesc(j.place.editorial_summary?.overview ?? "");
-        setEditWebsite(j.place.website ?? "");
-        setEditPhone(
-          j.place.formatted_phone_number ?? j.place.international_phone_number ?? ""
-        );
-        setCandidates(null);
+        applyPlaceDetails(j.place);
       }
     } catch {
       setErr(t("ob_err_network"));
@@ -254,42 +359,86 @@ export default function OnboardingPage() {
         {step === 1 ? (
           <div className="space-y-4">
             <label className="block text-sm text-zinc-400">{t("ob_q1_label")}</label>
-            <input
-              className="w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t("ob_q1_ph")}
-            />
-            <button
-              type="button"
-              disabled={loading || !query.trim()}
-              onClick={() => void runSearch()}
-              className="rounded bg-amber-600/90 text-zinc-950 px-4 py-2 text-sm font-medium disabled:opacity-50"
-            >
-              {loading ? t("common_loading") : t("ob_lookup")}
-            </button>
+            <div className="relative">
+              <input
+                className="w-full rounded-lg border border-zinc-700/80 bg-zinc-900/80 px-3 py-2.5 text-sm shadow-inner outline-none ring-amber-500/20 focus:border-amber-600/50 focus:ring-2"
+                value={query}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setQuery(v);
+                  if (
+                    committedQueryRef.current != null &&
+                    v !== committedQueryRef.current
+                  ) {
+                    committedQueryRef.current = null;
+                    setPlace(null);
+                  }
+                }}
+                onFocus={() => {
+                  if (searchPanel) setSearchMenuOpen(true);
+                }}
+                placeholder={t("ob_q1_ph")}
+                autoComplete="off"
+              />
+              {searchBusy ? (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500">
+                  {t("common_loading")}
+                </span>
+              ) : null}
 
-            {candidates?.length ? (
-              <ul className="space-y-2 border border-zinc-800 rounded-lg p-3 bg-zinc-900/40">
-                <li className="text-xs text-zinc-500">{t("ob_pick_match")}</li>
-                {candidates.map((c) => (
-                  <li key={c.place_id}>
-                    <button
-                      type="button"
-                      className="text-left w-full text-sm text-amber-500/90 hover:text-amber-400"
-                      onClick={() => void pickCandidate(c)}
-                    >
-                      {c.name}
-                      {c.formatted_address ? (
-                        <span className="block text-xs text-zinc-500">
-                          {c.formatted_address}
-                        </span>
-                      ) : null}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
+              {searchMenuOpen && searchPanel ? (
+                <ul className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-zinc-700/80 bg-zinc-900 py-1 shadow-xl shadow-black/40">
+                  {searchPanel.mode === "list" &&
+                  searchPanel.candidates.length === 0 ? (
+                    <li className="px-3 py-2 text-xs text-zinc-500">
+                      {locale === "de" ? "Keine Treffer." : "No results."}
+                    </li>
+                  ) : null}
+                  {searchPanel.mode === "list"
+                    ? searchPanel.candidates.map((c) => (
+                        <li key={c.place_id}>
+                          <button
+                            type="button"
+                            disabled={loading}
+                            className="w-full px-3 py-2 text-left text-sm text-amber-500/90 hover:bg-zinc-800/80 disabled:opacity-50"
+                            onClick={() => void pickCandidate(c)}
+                          >
+                            {c.name}
+                            {c.formatted_address ? (
+                              <span className="block text-xs font-normal text-zinc-500">
+                                {c.formatted_address}
+                              </span>
+                            ) : null}
+                          </button>
+                        </li>
+                      ))
+                    : null}
+                  {searchPanel.mode === "single" ? (
+                    <li>
+                      <button
+                        type="button"
+                        className="w-full px-3 py-2 text-left text-sm text-amber-500/90 hover:bg-zinc-800/80"
+                        onClick={() =>
+                          applyPlaceDetails(searchPanel.place)
+                        }
+                      >
+                        {searchPanel.place.name}
+                        {searchPanel.place.formatted_address ? (
+                          <span className="block text-xs font-normal text-zinc-500">
+                            {searchPanel.place.formatted_address}
+                          </span>
+                        ) : null}
+                      </button>
+                    </li>
+                  ) : null}
+                </ul>
+              ) : null}
+            </div>
+            <p className="text-xs text-zinc-600">
+              {locale === "de"
+                ? "Mindestens 3 Zeichen — Treffer erscheinen automatisch."
+                : "Type at least 3 characters — results appear as you type."}
+            </p>
 
             {place ? (
               <div className="border border-zinc-800 rounded-lg p-4 space-y-3 bg-zinc-900/40">
@@ -298,6 +447,7 @@ export default function OnboardingPage() {
                   <>
                     {/* eslint-disable-next-line @next/next/no-img-element -- same-origin Places proxy */}
                     <img
+                      key={`${place.place_id}:${photoUrl}`}
                       src={photoUrl}
                       alt=""
                       className="w-full max-h-48 object-cover rounded border border-zinc-800"
@@ -375,7 +525,15 @@ export default function OnboardingPage() {
             >
               {t("common_back")}
             </button>
-            {QA_KEYS.map(({ key, label }) => (
+            {chipsLoading ? (
+              <p className="text-xs text-zinc-500">{t("common_loading")}</p>
+            ) : null}
+            {QA_KEYS.map(({ key, label }) => {
+              const rowChips =
+                smartChips?.[key] && smartChips[key].length > 0
+                  ? smartChips[key]
+                  : chips[key];
+              return (
               <div key={key} className="space-y-2">
                 <label className="text-sm text-zinc-300">{t(label)}</label>
                 <textarea
@@ -387,7 +545,7 @@ export default function OnboardingPage() {
                   placeholder={t("common_optional")}
                 />
                 <div className="flex flex-wrap gap-2">
-                  {chips[key].map((chip) => (
+                  {rowChips.map((chip) => (
                     <button
                       key={chip}
                       type="button"
@@ -404,7 +562,8 @@ export default function OnboardingPage() {
                   ))}
                 </div>
               </div>
-            ))}
+            );
+            })}
             <div className="flex gap-3">
               <button
                 type="button"

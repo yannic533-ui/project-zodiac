@@ -146,7 +146,16 @@ export async function textSearchPlaces(
       "X-Goog-Api-Key": apiKey,
       "X-Goog-FieldMask": SEARCH_TEXT_FIELD_MASK,
     },
-    body: JSON.stringify({ textQuery: query, languageCode }),
+    body: JSON.stringify({
+      textQuery: query,
+      languageCode,
+      locationBias: {
+        circle: {
+          center: { latitude: 47.3769, longitude: 8.5417 },
+          radius: 50000.0,
+        },
+      },
+    }),
   });
 
   if (!res.ok) {

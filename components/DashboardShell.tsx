@@ -25,43 +25,44 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-zinc-950">
-      <header className="border-b border-zinc-800 bg-zinc-950/80 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 py-3 pr-20 flex flex-wrap items-center gap-4 justify-between">
-          <span className="text-amber-500/90 font-medium tracking-tight">
+    <div className="min-h-screen flex flex-col bg-zinc-950 bg-[radial-gradient(ellipse_120%_80%_at_50%_-20%,rgba(245,158,11,0.08),transparent)]">
+      <header className="border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur-md sticky top-0 z-10 shadow-[0_1px_0_0_rgba(255,255,255,0.04)]">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 pr-20 flex flex-wrap items-center gap-4 justify-between">
+          <span className="text-amber-400 font-semibold tracking-tight text-lg">
             {t("dash_brand")}
           </span>
-          <nav className="flex flex-wrap gap-3 text-sm items-center">
+          <nav className="flex flex-wrap gap-1 sm:gap-2 text-sm items-center">
             {links.map((l) => (
               <Link
                 key={l.href}
                 href={l.href}
                 className={
                   pathname === l.href
-                    ? "text-amber-400"
-                    : "text-zinc-400 hover:text-zinc-200"
+                    ? "rounded-md px-2.5 py-1.5 text-amber-300 bg-amber-500/10 ring-1 ring-amber-500/20"
+                    : "rounded-md px-2.5 py-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/50"
                 }
               >
                 {l.label}
               </Link>
             ))}
+            <span className="w-px h-4 bg-zinc-800 mx-1 hidden sm:block" aria-hidden />
             <Link
               href="/onboarding"
-              className="text-zinc-500 hover:text-zinc-300"
+              className="rounded-md px-2.5 py-1.5 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50"
             >
               {t("dash_nav_onboarding")}
             </Link>
             <button
               type="button"
               onClick={() => void logout()}
-              className="text-zinc-500 hover:text-zinc-300"
+              className="rounded-md px-2.5 py-1.5 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50"
             >
               {t("dash_logout")}
             </button>
           </nav>
         </div>
       </header>
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-8 pr-20">
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-10 sm:py-12 pr-20">
         {children}
       </main>
     </div>

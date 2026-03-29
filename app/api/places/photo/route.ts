@@ -33,18 +33,27 @@ export async function GET(request: Request) {
   mediaUrl.searchParams.set("maxWidthPx", maxWidthPx);
   mediaUrl.searchParams.set("key", key);
 
-  const res = await fetch(mediaUrl.toString(), { redirect: "manual" });
+  const noStore = {
+    cache: "no-store" as RequestCache,
+    next: { revalidate: 0 },
+  };
+
+  const res = await fetch(mediaUrl.toString(), { redirect: "manual", ...noStore });
   if (res.status >= 300 && res.status < 400) {
     const loc = res.headers.get("location");
     if (loc) {
-      const img = await fetch(loc);
+      const img = await fetch(loc, noStore);
       if (!img.ok) {
         return NextResponse.json({ error: "Photo fetch failed" }, { status: 502 });
       }
       const buf = await img.arrayBuffer();
       const ct = img.headers.get("content-type") ?? "image/jpeg";
       return new NextResponse(buf, {
-        headers: { "Content-Type": ct, "Cache-Control": "public, max-age=86400" },
+        headers: {
+          "Content-Type": ct,
+          "Cache-Control": "private, no-store, must-revalidate",
+          Vary: "*",
+        },
       });
     }
   }
@@ -56,6 +65,10 @@ export async function GET(request: Request) {
   const buf = await res.arrayBuffer();
   const ct = res.headers.get("content-type") ?? "image/jpeg";
   return new NextResponse(buf, {
-    headers: { "Content-Type": ct, "Cache-Control": "public, max-age=86400" },
+    headers: {
+      "Content-Type": ct,
+      "Cache-Control": "private, no-store, must-revalidate",
+      Vary: "*",
+    },
   });
 }
