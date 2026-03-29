@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 
 const links = [
   { href: "/admin", label: "Live" },
+  { href: "/admin/owners", label: "Owners" },
   { href: "/admin/bars", label: "Bars" },
   { href: "/admin/riddles", label: "Riddles" },
   { href: "/admin/events", label: "Events" },
@@ -21,7 +22,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   }
 
   async function logout() {
-    await fetch("/api/admin/logout", { method: "POST", credentials: "include" });
+    await Promise.all([
+      fetch("/api/admin/logout", { method: "POST", credentials: "include" }),
+      fetch("/api/auth/logout", { method: "POST", credentials: "include" }),
+    ]);
     router.push("/admin/login");
     router.refresh();
   }

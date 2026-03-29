@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -57,6 +58,15 @@ export default function AdminLoginPage() {
         >
           {loading ? "…" : "Sign in"}
         </button>
+        <p className="text-xs text-zinc-500 text-center pt-2">
+          Super admin?{" "}
+          <Link
+            href="/login?next=/admin"
+            className="text-amber-500/90 hover:text-amber-400 underline underline-offset-2"
+          >
+            Email magic link
+          </Link>
+        </p>
       </form>
     </div>
   );

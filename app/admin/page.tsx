@@ -17,6 +17,28 @@ type LiveRow = {
 export default function AdminLivePage() {
   const [groups, setGroups] = useState<LiveRow[]>([]);
   const [err, setErr] = useState("");
+  const [stats, setStats] = useState<{
+    totalBars: number;
+    totalEvents: number;
+    totalGroupsPlayed: number;
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const res = await fetch("/api/admin/stats", { credentials: "include" });
+      if (!res.ok) return;
+      const j = (await res.json()) as {
+        totalBars: number;
+        totalEvents: number;
+        totalGroupsPlayed: number;
+      };
+      if (!cancelled) setStats(j);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,10 +64,27 @@ export default function AdminLivePage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl text-zinc-100 font-medium">Live groups</h1>
+      <h1 className="text-xl text-zinc-100 font-medium">Global live</h1>
       <p className="text-sm text-zinc-500">
-        Refreshes every few seconds. Current bar follows the filtered active route.
+        All groups across every event. Refreshes every few seconds. Current bar
+        follows the filtered active route for that event.
       </p>
+      {stats ? (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+          <div className="border border-zinc-800 rounded-lg p-3 bg-zinc-900/40">
+            <div className="text-zinc-500 text-xs">Total bars</div>
+            <div className="text-lg text-amber-500/90">{stats.totalBars}</div>
+          </div>
+          <div className="border border-zinc-800 rounded-lg p-3 bg-zinc-900/40">
+            <div className="text-zinc-500 text-xs">Total events</div>
+            <div className="text-lg text-amber-500/90">{stats.totalEvents}</div>
+          </div>
+          <div className="border border-zinc-800 rounded-lg p-3 bg-zinc-900/40">
+            <div className="text-zinc-500 text-xs">Total groups (all time)</div>
+            <div className="text-lg text-amber-500/90">{stats.totalGroupsPlayed}</div>
+          </div>
+        </div>
+      ) : null}
       {err ? <p className="text-red-400 text-sm">{err}</p> : null}
       <div className="overflow-x-auto rounded border border-zinc-800">
         <table className="w-full text-sm text-left">

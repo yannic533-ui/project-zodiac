@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Schnuffis — Admin",
-  description: "Scavenger hunt orchestration",
+  title: "Schnuffis — Bar scavenger hunts",
+  description: "Multi-tenant scavenger hunt platform for bars and live Telegram games",
 };
 
 export default function RootLayout({

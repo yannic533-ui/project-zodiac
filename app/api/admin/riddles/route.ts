@@ -25,7 +25,7 @@ const patchSchema = z.object({
 });
 
 export async function GET(request: Request) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
 
   const barId = new URL(request.url).searchParams.get("bar_id");
@@ -42,7 +42,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
 
   let json: unknown;
@@ -58,10 +58,16 @@ export async function POST(request: Request) {
   }
 
   const sb = createAdminClient();
+  const { data: barRow } = await sb
+    .from("bars")
+    .select("owner_id")
+    .eq("id", parsed.data.bar_id)
+    .maybeSingle();
   const { data, error } = await sb
     .from("riddles")
     .insert({
       bar_id: parsed.data.bar_id,
+      owner_id: (barRow?.owner_id as string | null) ?? null,
       question: parsed.data.question,
       answer_keywords: parsed.data.answer_keywords,
       difficulty: parsed.data.difficulty,
@@ -79,7 +85,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
 
   const id = new URL(request.url).searchParams.get("id");
@@ -118,7 +124,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
 
   const id = new URL(request.url).searchParams.get("id");

@@ -11,6 +11,7 @@ const createSchema = z.object({
   address: z.string().min(1),
   active: z.boolean().optional(),
   prize_description: z.string().optional(),
+  owner_id: z.string().uuid().optional().nullable(),
 });
 
 const patchSchema = z.object({
@@ -21,7 +22,7 @@ const patchSchema = z.object({
 });
 
 export async function GET(request: Request) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
 
   const sb = createAdminClient();
@@ -40,7 +41,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
 
   let json: unknown;
@@ -63,6 +64,7 @@ export async function POST(request: Request) {
       address: parsed.data.address,
       active: parsed.data.active ?? true,
       prize_description: parsed.data.prize_description ?? "",
+      owner_id: parsed.data.owner_id ?? null,
     })
     .select("*")
     .single();
@@ -75,7 +77,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
 
   const id = new URL(request.url).searchParams.get("id");
@@ -114,7 +116,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
 
   const id = new URL(request.url).searchParams.get("id");

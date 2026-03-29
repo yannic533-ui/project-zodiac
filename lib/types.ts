@@ -8,6 +8,7 @@ export type BarRow = {
   active: boolean;
   prize_description: string;
   created_at: string;
+  owner_id?: string | null;
 };
 
 export type RiddleRow = {
@@ -19,6 +20,7 @@ export type RiddleRow = {
   hint_1: string;
   hint_2: string;
   created_at: string;
+  owner_id?: string | null;
 };
 
 export type EventRow = {
@@ -28,6 +30,7 @@ export type EventRow = {
   route: string[];
   active: boolean;
   created_at: string;
+  owner_id?: string | null;
 };
 
 export type GroupRow = {

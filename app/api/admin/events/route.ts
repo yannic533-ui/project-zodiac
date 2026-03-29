@@ -22,7 +22,7 @@ const patchSchema = z.object({
 });
 
 export async function GET(request: Request) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
 
   const sb = createAdminClient();
@@ -39,7 +39,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
 
   let json: unknown;
@@ -56,6 +56,17 @@ export async function POST(request: Request) {
 
   const sb = createAdminClient();
 
+  let ownerId: string | null = null;
+  const routeIds = parsed.data.route;
+  if (routeIds.length > 0) {
+    const { data: firstBar } = await sb
+      .from("bars")
+      .select("owner_id")
+      .eq("id", routeIds[0])
+      .maybeSingle();
+    ownerId = (firstBar?.owner_id as string | null) ?? null;
+  }
+
   if (parsed.data.active === true) {
     await deactivateAllEvents(sb);
   }
@@ -67,6 +78,7 @@ export async function POST(request: Request) {
       date: parsed.data.date ?? null,
       route: parsed.data.route,
       active: parsed.data.active ?? false,
+      owner_id: ownerId,
     })
     .select("*")
     .single();
@@ -79,7 +91,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
 
   const id = new URL(request.url).searchParams.get("id");
@@ -150,7 +162,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
 
   const id = new URL(request.url).searchParams.get("id");
