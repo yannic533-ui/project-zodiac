@@ -18,6 +18,8 @@ Telegram groups play a bar crawl in Zurich. The bot speaks as **Der Bote**; Clau
 | `SUPABASE_SERVICE_ROLE_KEY` | yes | **Server only.** Never expose to the browser. |
 | `SUPABASE_ANON_KEY` | optional | Reserved for future client-side Supabase usage |
 | `ANTHROPIC_API_KEY` | yes | Claude API |
+| `ANTHROPIC_MODEL` | optional | Default `claude-3-5-haiku-latest`. Set a concrete model id if Anthropic retires an alias. |
+| `ANTHROPIC_TIMEOUT_MS` | optional | Default `25000`. Single-request timeout for Netlify/serverless limits. |
 | `TELEGRAM_BOT_TOKEN` | yes | From BotFather |
 | `ADMIN_PASSWORD` | yes | Plain password for `/admin` login |
 | `TELEGRAM_WEBHOOK_SECRET` | optional | If set, Telegram must send matching `X-Telegram-Bot-Api-Secret-Token` |

@@ -209,6 +209,12 @@ export async function processHuntMessage(msg: TelegramMessage): Promise<void> {
   }
 
   if (group.state === "riddle") {
+    console.log("[hunt] processHuntMessage riddle branch", {
+      groupId: group.id,
+      telegramChatId: String(chatId),
+      textLen: text.length,
+      hintCount: group.hint_count,
+    });
     await handleRiddleAnswer(group, text);
   }
 }
@@ -284,9 +290,21 @@ async function startRiddleForGroup(group: GroupRow) {
 
 async function handleRiddleAnswer(group: GroupRow, text: string) {
   const chatId = BigInt(group.telegram_chat_id);
+  console.log("[hunt] handleRiddleAnswer enter", {
+    groupId: group.id,
+    state: group.state,
+    currentBarIndex: group.current_bar_index,
+    chatId: String(chatId),
+    textPreview: text.slice(0, 80),
+  });
+
   const route = await filteredRouteForEvent(group.event_id);
   const barId = route[group.current_bar_index];
   if (!barId) {
+    console.warn("[hunt] handleRiddleAnswer no barId for index", {
+      index: group.current_bar_index,
+      routeLen: route.length,
+    });
     await sendTelegramMessage(
       chatId,
       "Route error."
@@ -297,17 +315,39 @@ async function handleRiddleAnswer(group: GroupRow, text: string) {
   const bar = await loadBar(barId);
   const riddle = await loadRiddleForBar(barId);
   if (!riddle || !bar) {
+    console.warn("[hunt] handleRiddleAnswer missing bar or riddle", {
+      barId,
+      hasBar: Boolean(bar),
+      hasRiddle: Boolean(riddle),
+    });
     await sendTelegramMessage(chatId, "Missing bar or riddle.");
     return;
   }
 
   const lang = group.language ?? "en";
-  const result = await validateRiddleWithClaude({
-    language: lang,
-    question: riddle.question,
-    answerKeywords: riddle.answer_keywords ?? [],
-    userAnswer: text,
-  });
+  let result;
+  try {
+    result = await validateRiddleWithClaude({
+      language: lang,
+      question: riddle.question,
+      answerKeywords: riddle.answer_keywords ?? [],
+      userAnswer: text,
+    });
+    console.log("[hunt] handleRiddleAnswer claude returned", {
+      valid: result.valid,
+      hasPassphrase: Boolean(result.passphrase),
+      replyLen: result.reply?.length ?? 0,
+    });
+  } catch (e) {
+    console.error("[hunt] handleRiddleAnswer Claude threw", e);
+    await sendTelegramMessage(
+      chatId,
+      lang === "de"
+        ? "Kurz stocken. Probier es gleich noch einmal."
+        : "Brief hiccup. Try again in a moment."
+    );
+    return;
+  }
 
   if (result.valid && result.passphrase) {
     const { base, hintPenalty } = barPointsForSolve(group.hints_delivered);
@@ -344,7 +384,13 @@ async function handleRiddleAnswer(group: GroupRow, text: string) {
     let body = `${result.reply}\n\n${whisper}\n${addrLine}`;
     if (prize) body += `\n${prize}`;
 
-    await sendTelegramMessage(chatId, body);
+    try {
+      await sendTelegramMessage(chatId, body);
+      console.log("[hunt] handleRiddleAnswer sent travelling message ok");
+    } catch (e) {
+      console.error("[hunt] handleRiddleAnswer Telegram send (correct) failed", e);
+      throw e;
+    }
     return;
   }
 
@@ -352,7 +398,13 @@ async function handleRiddleAnswer(group: GroupRow, text: string) {
   let hintsDelivered = group.hints_delivered;
   const updates: Record<string, unknown> = { hint_count: newHintCount };
 
-  await sendTelegramMessage(chatId, result.reply);
+  try {
+    await sendTelegramMessage(chatId, result.reply || (lang === "de" ? "Noch nicht." : "Not quite."));
+    console.log("[hunt] handleRiddleAnswer sent wrong-answer reply ok");
+  } catch (e) {
+    console.error("[hunt] handleRiddleAnswer Telegram send (wrong) failed", e);
+    throw e;
+  }
 
   if (newHintCount === 2 && hintsDelivered < 1 && riddle.hint_1?.trim()) {
     hintsDelivered = 1;

@@ -34,7 +34,10 @@ export async function POST(request: Request) {
   try {
     await processHuntMessage(msg);
   } catch (e) {
-    console.error("webhook process error", e);
+    console.error("[webhook] processHuntMessage error", e);
+    if (e instanceof Error) {
+      console.error("[webhook] stack", e.stack);
+    }
   }
 
   return NextResponse.json({ ok: true });
