@@ -15,6 +15,12 @@ export const metadata: Metadata = {
   description: "Multi-tenant scavenger hunt platform for bars and live Telegram games",
 };
 
+export const viewport = {
+  width: "device-width" as const,
+  initialScale: 1,
+  maximumScale: 1,
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{

@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import type { ChangeEvent, CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -215,7 +215,7 @@ export default function OnboardingPage() {
   const searchAbortRef = useRef<AbortController | null>(null);
   const searchSeqRef = useRef(0);
   const committedQueryRef = useRef<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const chatBodyRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const seededRef = useRef(false);
   const messagesRef = useRef<ChatMessage[]>([]);
@@ -226,32 +226,56 @@ export default function OnboardingPage() {
     [qaNotes]
   );
 
-  const scrollToBottom = useCallback(() => {
-    requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({
-        top: scrollRef.current.scrollHeight,
-        behavior: "smooth",
-      });
+  useEffect(() => {
+    const setVh = () => {
+      document.documentElement.style.setProperty(
+        "--vh",
+        `${window.innerHeight * 0.01}px`
+      );
+    };
+    setVh();
+    window.addEventListener("resize", setVh);
+    return () => window.removeEventListener("resize", setVh);
+  }, []);
+
+  const computeAtBottom = useCallback((el: HTMLDivElement) => {
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 50;
+  }, []);
+
+  const scrollToBottom = useCallback((smooth: boolean) => {
+    const el = chatBodyRef.current;
+    if (!el) return;
+    el.scrollTo({
+      top: el.scrollHeight,
+      behavior: smooth ? "smooth" : "auto",
     });
   }, []);
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, typing, searchPanel, scrollToBottom]);
-
-  const appendMessages = useCallback((next: ChatMessage[]) => {
-    setMessages((m) => [...m, ...next]);
-  }, []);
-
-  const withTyping = useCallback(
-    async (fn: () => Promise<void> | void) => {
-      setTyping(true);
-      await delay(300);
-      setTyping(false);
-      await fn();
-      await delay(300);
+  const appendMessages = useCallback(
+    (next: ChatMessage[], fromUser = false) => {
+      const el = chatBodyRef.current;
+      const shouldScroll = fromUser
+        ? !el || computeAtBottom(el)
+        : true;
+      setMessages((m) => [...m, ...next]);
+      requestAnimationFrame(() => {
+        if (shouldScroll) scrollToBottom(true);
+      });
     },
-    []
+    [computeAtBottom, scrollToBottom]
+  );
+
+  const agentSay = useCallback(
+    async (appendFn: () => void, typingDelay = 300) => {
+      setTyping(true);
+      requestAnimationFrame(() => scrollToBottom(true));
+      await delay(typingDelay);
+      setTyping(false);
+      await delay(50);
+      appendFn();
+      requestAnimationFrame(() => scrollToBottom(true));
+    },
+    [scrollToBottom]
   );
 
   /** Seed opening agent line once */
@@ -259,13 +283,15 @@ export default function OnboardingPage() {
     if (seededRef.current) return;
     seededRef.current = true;
     void (async () => {
-      await withTyping(async () => {
-        appendMessages([
-          { id: uid(), role: "agent", kind: "text", text: copy.open },
-        ]);
+      await agentSay(() => {
+        appendMessages(
+          [{ id: uid(), role: "agent", kind: "text", text: copy.open }],
+          false
+        );
       });
+      scrollToBottom(false);
     })();
-  }, [appendMessages, copy.open, withTyping]);
+  }, [appendMessages, agentSay, copy.open, scrollToBottom]);
 
   /** Debounced places search */
   useEffect(() => {
@@ -338,6 +364,12 @@ export default function OnboardingPage() {
     };
   }, [query, locale, phase, t]);
 
+  useEffect(() => {
+    if (phase !== "search" || !searchPanel) return;
+    const el = chatBodyRef.current;
+    if (!el || computeAtBottom(el)) scrollToBottom(true);
+  }, [searchPanel, phase, computeAtBottom, scrollToBottom]);
+
   /** Fetch suggestions when entering QA */
   useEffect(() => {
     if (phase !== "qa" || !place) return;
@@ -377,16 +409,32 @@ export default function OnboardingPage() {
     };
   }, [phase, place, locale]);
 
-  const resizeTextarea = useCallback(() => {
+  const resetTextareaHeight = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
-    el.style.height = "0";
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+    el.style.height = "24px";
   }, []);
 
-  useEffect(() => {
-    resizeTextarea();
-  }, [input, resizeTextarea]);
+  const handleTextareaInput = useCallback(
+    (e: ChangeEvent<HTMLTextAreaElement>) => {
+      const v = e.target.value;
+      setInput(v);
+      const el = e.target;
+      el.style.height = "auto";
+      el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+      if (phase === "search") {
+        setQuery(v);
+        if (
+          committedQueryRef.current != null &&
+          v !== committedQueryRef.current
+        ) {
+          committedQueryRef.current = null;
+          setPlace(null);
+        }
+      }
+    },
+    [phase]
+  );
 
   async function pickCandidate(c: Candidate) {
     setErr("");
@@ -414,11 +462,14 @@ export default function OnboardingPage() {
       committedQueryRef.current = p.name;
       setQuery(p.name);
       setSearchPanel(null);
-      appendMessages([
-        { id: uid(), role: "agent", kind: "place_card", place: p },
-        { id: uid(), role: "agent", kind: "text", text: copy.confirm },
-        { id: uid(), role: "ui", kind: "confirm_bar" },
-      ]);
+      appendMessages(
+        [
+          { id: uid(), role: "agent", kind: "place_card", place: p },
+          { id: uid(), role: "agent", kind: "text", text: copy.confirm },
+          { id: uid(), role: "ui", kind: "confirm_bar" },
+        ],
+        false
+      );
       setPhase("confirm_bar");
     } catch {
       setErr(t("ob_err_network"));
@@ -429,18 +480,26 @@ export default function OnboardingPage() {
   function onConfirmJa() {
     if (!place) return;
     setProgressPct(25);
-    setPhase("qa");
     setQaNotes([]);
     setFirstQaMessageSent(false);
     setInput("");
-    appendMessages([
-      {
-        id: uid(),
-        role: "agent",
-        kind: "text",
-        text: copy.whatElse(place.name),
-      },
-    ]);
+    resetTextareaHeight();
+    void (async () => {
+      await agentSay(() =>
+        appendMessages(
+          [
+            {
+              id: uid(),
+              role: "agent",
+              kind: "text",
+              text: copy.whatElse(place.name),
+            },
+          ],
+          false
+        )
+      );
+      setPhase("qa");
+    })();
   }
 
   useEffect(() => {
@@ -450,7 +509,10 @@ export default function OnboardingPage() {
       (m) => m.role === "ui" && m.kind === "suggestions"
     );
     if (items.length === 0 || hasSuggestions) return;
-    appendMessages([{ id: uid(), role: "ui", kind: "suggestions", items }]);
+    appendMessages(
+      [{ id: uid(), role: "ui", kind: "suggestions", items }],
+      false
+    );
   }, [phase, place, smartChips, chipsLoading, appendMessages]);
 
   function onConfirmOther() {
@@ -460,11 +522,23 @@ export default function OnboardingPage() {
     committedQueryRef.current = null;
     setQuery("");
     setInput("");
-    void withTyping(async () => {
-      appendMessages([
-        { id: uid(), role: "agent", kind: "text", text: copy.searchAgain },
-      ]);
-    });
+    resetTextareaHeight();
+    void (async () => {
+      await delay(400);
+      await agentSay(() =>
+        appendMessages(
+          [
+            {
+              id: uid(),
+              role: "agent",
+              kind: "text",
+              text: copy.searchAgain,
+            },
+          ],
+          false
+        )
+      );
+    })();
   }
 
   const stripReviewTail = useCallback((list: ChatMessage[]): ChatMessage[] => {
@@ -488,11 +562,12 @@ export default function OnboardingPage() {
       setLoading(true);
       setPhase("generating");
       try {
-        await withTyping(async () => {
-          appendMessages([
-            { id: uid(), role: "agent", kind: "text", text: copy.moment },
-          ]);
-        });
+        await agentSay(() =>
+          appendMessages(
+            [{ id: uid(), role: "agent", kind: "text", text: copy.moment }],
+            false
+          )
+        );
         const res = await fetch("/api/onboarding/generate-riddles", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -512,6 +587,7 @@ export default function OnboardingPage() {
         const pack = j.riddles ?? [];
         if (opts?.replaceReview) {
           setMessages((m) => stripReviewTail(m));
+          requestAnimationFrame(() => scrollToBottom(true));
         }
         setRiddles(pack);
         setProgressPct(75);
@@ -521,25 +597,46 @@ export default function OnboardingPage() {
         const sorted = [...pack].sort((a, b) => a.difficulty - b.difficulty);
         for (let i = 0; i < sorted.length; i++) {
           if (i > 0) await delay(400);
-          await withTyping(async () => {
-            appendMessages([
-              { id: uid(), role: "agent", kind: "riddle", riddle: sorted[i] },
-            ]);
-          });
+          await agentSay(() =>
+            appendMessages(
+              [
+                {
+                  id: uid(),
+                  role: "agent",
+                  kind: "riddle",
+                  riddle: sorted[i],
+                },
+              ],
+              false
+            )
+          );
         }
 
-        await delay(300);
-        appendMessages([
-          { id: uid(), role: "agent", kind: "text", text: copy.reviewAsk },
-          { id: uid(), role: "agent", kind: "review_prompt" },
-        ]);
+        await delay(400);
+        await agentSay(() =>
+          appendMessages(
+            [
+              {
+                id: uid(),
+                role: "agent",
+                kind: "text",
+                text: copy.reviewAsk,
+              },
+            ],
+            false
+          )
+        );
+        appendMessages(
+          [{ id: uid(), role: "agent", kind: "review_prompt" }],
+          false
+        );
       } catch {
         setErr(t("ob_err_network"));
         setPhase(opts?.replaceReview ? "review_riddles" : "qa");
       }
       setLoading(false);
     },
-    [place, qa, appendMessages, copy, t, withTyping, stripReviewTail]
+    [place, qa, appendMessages, copy, t, agentSay, stripReviewTail, scrollToBottom]
   );
 
   async function regenOne(d: 1 | 2 | 3) {
@@ -611,16 +708,20 @@ export default function OnboardingPage() {
       }
       setProgressPct(100);
       setPhase("done");
-      await withTyping(async () => {
-        appendMessages([
-          {
-            id: uid(),
-            role: "agent",
-            kind: "text",
-            text: copy.live(place.name),
-          },
-        ]);
-      });
+      await delay(400);
+      await agentSay(() =>
+        appendMessages(
+          [
+            {
+              id: uid(),
+              role: "agent",
+              kind: "text",
+              text: copy.live(place.name),
+            },
+          ],
+          false
+        )
+      );
     } catch {
       setErr(t("ob_err_network"));
     }
@@ -643,8 +744,12 @@ export default function OnboardingPage() {
     const trimmed = text.trim();
     if (!trimmed) return;
 
-    appendMessages([{ id: uid(), role: "user", kind: "text", text: trimmed }]);
+    appendMessages(
+      [{ id: uid(), role: "user", kind: "text", text: trimmed }],
+      true
+    );
     setInput("");
+    resetTextareaHeight();
 
     if (!firstQaMessageSent) {
       setFirstQaMessageSent(true);
@@ -652,16 +757,19 @@ export default function OnboardingPage() {
     }
 
     if (isDoneMessage(trimmed, lc)) {
+      await delay(400);
       await generatePack();
       return;
     }
 
     setQaNotes((n) => [...n, trimmed]);
-    await withTyping(async () => {
-      appendMessages([
-        { id: uid(), role: "agent", kind: "text", text: copy.noch },
-      ]);
-    });
+    await delay(400);
+    await agentSay(() =>
+      appendMessages(
+        [{ id: uid(), role: "agent", kind: "text", text: copy.noch }],
+        false
+      )
+    );
   }
 
   function difficultyUpper(d: number): string {
@@ -711,45 +819,77 @@ export default function OnboardingPage() {
     }
   }
 
-  const baseTextStyle: CSSProperties = {
+  const shellStyle: CSSProperties = {
+    height: "calc(var(--vh, 1vh) * 100)",
+    maxWidth: 640,
+    margin: "0 auto",
+    overflow: "hidden",
+    position: "relative",
+    display: "flex",
+    flexDirection: "column",
     fontFamily: "var(--font-inter), system-ui, sans-serif",
     fontWeight: 300,
+    fontSize: 15,
+    lineHeight: 1.6,
+    color: "#000",
+    background: "#fff",
+  };
+
+  const chatBodyStyle: CSSProperties = {
+    flex: 1,
+    overflowY: "auto",
+    overflowX: "hidden",
+    overscrollBehavior: "contain",
+    padding: "24px 16px 16px",
+    scrollBehavior: "smooth",
+    minHeight: 0,
+  };
+
+  const inputAreaStyle: CSSProperties = {
+    flexShrink: 0,
+    borderTop: "0.5px solid #e8e8e8",
+    padding: "12px 16px",
+    paddingBottom: "max(12px, env(safe-area-inset-bottom))",
+    background: "#fff",
   };
 
   return (
-    <div
-      className="fixed inset-0 z-40 flex flex-col bg-white text-black"
-      style={baseTextStyle}
-    >
+    <div className="onb-shell text-black" style={shellStyle}>
       <div
-        className="w-full shrink-0 bg-[#e8e8e8]"
-        style={{ height: 1 }}
         aria-hidden
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 1,
+          zIndex: 10,
+          background: "#e8e8e8",
+        }}
       >
         <div
-          className="h-full bg-black transition-[width] duration-300 ease-out"
-          style={{ width: `${progressPct}%` }}
+          style={{
+            height: "100%",
+            background: "#000",
+            width: `${progressPct}%`,
+            transition: "width 0.6s ease",
+          }}
         />
       </div>
 
-      <div className="flex flex-1 flex-col overflow-hidden mx-auto w-full max-w-[640px] min-h-0">
-        <div
-          ref={scrollRef}
-          className="flex-1 overflow-y-auto min-h-0"
-          style={{ padding: "24px 16px" }}
-        >
-          <div className="flex flex-col" style={{ gap: 12 }}>
+      <div ref={chatBodyRef} className="onb-chat-body" style={chatBodyStyle}>
+        <div className="flex flex-col" style={{ gap: 12 }}>
             {messages.map((m) => {
               if (m.role === "user" && m.kind === "text") {
                 const ut = m.text;
                 return (
                   <div key={m.id} className="flex justify-end w-full">
                     <div
-                      className="max-w-[75%] text-white bg-black"
+                      className="max-w-[80%] text-white bg-black"
                       style={{
-                        borderRadius: 16,
-                        padding: "10px 14px",
-                        fontSize: 14,
+                        borderRadius: 18,
+                        padding: "10px 16px",
+                        fontSize: 15,
                         lineHeight: 1.6,
                       }}
                     >
@@ -763,9 +903,9 @@ export default function OnboardingPage() {
                 return (
                   <div key={m.id} className="flex justify-start w-full">
                     <p
-                      className="max-w-[75%]"
+                      className="max-w-[80%]"
                       style={{
-                        fontSize: 14,
+                        fontSize: 15,
                         lineHeight: 1.6,
                         color: "#000",
                         margin: 0,
@@ -781,7 +921,7 @@ export default function OnboardingPage() {
                 const src = photoUrl(m.place);
                 return (
                   <div key={m.id} className="flex justify-start w-full">
-                    <div className="max-w-[75%] space-y-2">
+                    <div className="max-w-[80%] space-y-2">
                       {src ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -795,7 +935,7 @@ export default function OnboardingPage() {
                       ) : null}
                       <p
                         style={{
-                          fontSize: 14,
+                          fontSize: 15,
                           lineHeight: 1.6,
                           color: "#000",
                           margin: 0,
@@ -823,7 +963,7 @@ export default function OnboardingPage() {
                 const editing = editRiddle[r.difficulty] ?? false;
                 return (
                   <div key={m.id} className="flex justify-start w-full">
-                    <div className="max-w-[75%] w-full space-y-2">
+                    <div className="max-w-[80%] w-full space-y-2">
                       <p
                         style={{
                           fontSize: 11,
@@ -841,7 +981,7 @@ export default function OnboardingPage() {
                             style={{
                               border: "0.5px solid #e8e8e8",
                               padding: "10px 14px",
-                              fontSize: 14,
+                              fontSize: 16,
                               fontWeight: 300,
                               minHeight: 56,
                             }}
@@ -875,7 +1015,7 @@ export default function OnboardingPage() {
                             style={{
                               border: "0.5px solid #e8e8e8",
                               padding: "10px 14px",
-                              fontSize: 13,
+                              fontSize: 16,
                               fontWeight: 300,
                             }}
                             value={r.hint_1}
@@ -890,7 +1030,7 @@ export default function OnboardingPage() {
                             style={{
                               border: "0.5px solid #e8e8e8",
                               padding: "10px 14px",
-                              fontSize: 13,
+                              fontSize: 16,
                               fontWeight: 300,
                             }}
                             value={r.hint_2}
@@ -904,7 +1044,7 @@ export default function OnboardingPage() {
                       ) : (
                         <p
                           style={{
-                            fontSize: 14,
+                            fontSize: 15,
                             lineHeight: 1.6,
                             color: "#000",
                             margin: 0,
@@ -922,6 +1062,7 @@ export default function OnboardingPage() {
                             fontSize: 12,
                             color: "#666",
                             fontWeight: 300,
+                            touchAction: "manipulation",
                           }}
                           onClick={() => void regenOne(r.difficulty)}
                         >
@@ -934,6 +1075,7 @@ export default function OnboardingPage() {
                             fontSize: 12,
                             color: "#666",
                             fontWeight: 300,
+                            touchAction: "manipulation",
                           }}
                           onClick={() =>
                             setEditRiddle((prev) => ({
@@ -963,11 +1105,12 @@ export default function OnboardingPage() {
                       style={{
                         border: "0.5px solid #e8e8e8",
                         borderRadius: 0,
-                        padding: "10px 16px",
+                        padding: "10px 14px",
                         fontSize: 13,
                         fontWeight: 300,
                         color: "#000",
-                        maxWidth: "85%",
+                        maxWidth: "80%",
+                        touchAction: "manipulation",
                       }}
                       onClick={() => void completeSave()}
                     >
@@ -980,11 +1123,12 @@ export default function OnboardingPage() {
                       style={{
                         border: "0.5px solid #e8e8e8",
                         borderRadius: 0,
-                        padding: "10px 16px",
+                        padding: "10px 14px",
                         fontSize: 13,
                         fontWeight: 300,
                         color: "#000",
-                        maxWidth: "85%",
+                        maxWidth: "80%",
+                        touchAction: "manipulation",
                       }}
                       onClick={() => void onRegenerateAllRiddles()}
                     >
@@ -1007,11 +1151,12 @@ export default function OnboardingPage() {
                       style={{
                         border: "0.5px solid #e8e8e8",
                         borderRadius: 0,
-                        padding: "10px 16px",
+                        padding: "10px 14px",
                         fontSize: 13,
                         fontWeight: 300,
                         color: "#000",
-                        maxWidth: "85%",
+                        maxWidth: "80%",
+                        touchAction: "manipulation",
                       }}
                       onClick={() => onConfirmJa()}
                     >
@@ -1024,11 +1169,12 @@ export default function OnboardingPage() {
                       style={{
                         border: "0.5px solid #e8e8e8",
                         borderRadius: 0,
-                        padding: "10px 16px",
+                        padding: "10px 14px",
                         fontSize: 13,
                         fontWeight: 300,
                         color: "#000",
-                        maxWidth: "85%",
+                        maxWidth: "80%",
+                        touchAction: "manipulation",
                       }}
                       onClick={() => onConfirmOther()}
                     >
@@ -1053,16 +1199,23 @@ export default function OnboardingPage() {
                         style={{
                           border: "0.5px solid #e8e8e8",
                           borderRadius: 0,
-                          padding: "10px 16px",
+                          padding: "10px 14px",
                           fontSize: 13,
                           fontWeight: 300,
                           color: "#000",
-                          maxWidth: "90%",
+                          maxWidth: "80%",
+                          touchAction: "manipulation",
                         }}
                         onClick={() => {
                           setInput(item);
                           setSuggestionsVisible(false);
-                          resizeTextarea();
+                          requestAnimationFrame(() => {
+                            const el = textareaRef.current;
+                            if (el) {
+                              el.style.height = "auto";
+                              el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+                            }
+                          });
                         }}
                       >
                         {item}
@@ -1096,8 +1249,9 @@ export default function OnboardingPage() {
                         style={{
                           border: "0.5px solid #e8e8e8",
                           borderRadius: 0,
-                          padding: "10px 16px",
-                          maxWidth: "90%",
+                          padding: "10px 14px",
+                          maxWidth: "80%",
+                          touchAction: "manipulation",
                         }}
                         onClick={() => void pickCandidate(c)}
                       >
@@ -1135,8 +1289,9 @@ export default function OnboardingPage() {
                     style={{
                       border: "0.5px solid #e8e8e8",
                       borderRadius: 0,
-                      padding: "10px 16px",
-                      maxWidth: "90%",
+                      padding: "10px 14px",
+                      maxWidth: "80%",
+                      touchAction: "manipulation",
                     }}
                     onClick={() =>
                       void pickCandidate({
@@ -1193,138 +1348,148 @@ export default function OnboardingPage() {
           </div>
         </div>
 
-        {phase === "done" ? (
+      {phase === "done" ? (
+        <div
+          style={{
+            ...inputAreaStyle,
+            paddingTop: 16,
+          }}
+        >
           <div
-            className="shrink-0 border-t border-[#e8e8e8]"
+            className="font-mono bg-[#fafafa] w-full"
             style={{
-              borderTopWidth: 0.5,
-              padding: "24px 16px 32px",
+              border: "0.5px solid #e8e8e8",
+              fontSize: 12,
+              padding: "12px 16px",
+              wordBreak: "break-all",
+              marginBottom: 16,
             }}
           >
-            <div
-              className="font-mono bg-[#fafafa] w-full"
+            {TELEGRAM_LINK}
+          </div>
+          <button
+            type="button"
+            className="w-full bg-black text-white border-0 cursor-pointer"
+            style={{
+              padding: "14px",
+              fontSize: 16,
+              fontWeight: 300,
+              touchAction: "manipulation",
+            }}
+            onClick={() => {
+              router.push("/dashboard");
+              router.refresh();
+            }}
+          >
+            {copy.dashboard}
+          </button>
+        </div>
+      ) : (
+        <div style={inputAreaStyle}>
+          {err ? (
+            <p style={{ fontSize: 12, color: "#999", margin: "0 0 8px" }}>
+              {err}
+            </p>
+          ) : null}
+          <div
+            style={{
+              border: "0.5px solid #000",
+              padding: "10px 14px",
+              display: "flex",
+              alignItems: "flex-end",
+              gap: 8,
+              minWidth: 0,
+            }}
+          >
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              disabled={inputDisabled}
+              className="flex-1 bg-transparent border-0 outline-none resize-none disabled:opacity-50"
               style={{
-                border: "0.5px solid #e8e8e8",
-                fontSize: 12,
-                padding: "12px 16px",
-                wordBreak: "break-all",
-                marginBottom: 16,
+                fontSize: 16,
+                fontWeight: 300,
+                fontFamily: "inherit",
+                lineHeight: 1.5,
+                minHeight: 24,
+                maxHeight: 120,
+                height: 24,
+                overflowY: "auto",
+                color: "#000",
               }}
-            >
-              {TELEGRAM_LINK}
-            </div>
+              value={input}
+              onChange={handleTextareaInput}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  if (phase === "qa" && !inputDisabled) {
+                    void handleQaSend(input);
+                  }
+                }
+              }}
+              placeholder=""
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+            />
+            {searchBusy && phase === "search" ? (
+              <span
+                style={{
+                  fontSize: 12,
+                  color: "#999",
+                  marginBottom: 4,
+                  flexShrink: 0,
+                }}
+              >
+                {t("common_loading")}
+              </span>
+            ) : null}
             <button
               type="button"
-              className="w-full bg-black text-white border-0 cursor-pointer"
-              style={{ padding: "14px", fontSize: 14, fontWeight: 300 }}
-              onClick={() => {
-                router.push("/dashboard");
-                router.refresh();
+              disabled={inputDisabled || phase !== "qa" || !input.trim()}
+              className="flex items-center justify-center bg-black text-white border-0 disabled:opacity-40"
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: "50%",
+                fontSize: 16,
+                fontWeight: 300,
+                flexShrink: 0,
+                touchAction: "manipulation",
+                lineHeight: 1,
               }}
+              aria-label="Send"
+              onClick={() => onSendClick()}
             >
-              {copy.dashboard}
+              ↑
             </button>
           </div>
-        ) : (
-          <div
-            className="shrink-0 bg-white"
-            style={{
-              borderTop: "0.5px solid #e8e8e8",
-              padding: "12px 16px",
-            }}
-          >
-            {err ? (
-              <p style={{ fontSize: 12, color: "#999", margin: "0 0 8px" }}>
-                {err}
-              </p>
-            ) : null}
-            <div className="flex items-end gap-2">
-              <div
-                className="flex-1 flex items-end"
-                style={{
-                  border: "0.5px solid #000",
-                  padding: "10px 14px",
-                  display: "flex",
-                  minWidth: 0,
-                }}
-              >
-                <textarea
-                  ref={textareaRef}
-                  rows={1}
-                  disabled={inputDisabled}
-                  className="flex-1 bg-transparent border-0 outline-none resize-none min-h-[20px] max-h-[160px] disabled:opacity-50"
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 300,
-                    fontFamily: "inherit",
-                  }}
-                  value={input}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setInput(v);
-                    if (phase === "search") {
-                      setQuery(v);
-                      if (
-                        committedQueryRef.current != null &&
-                        v !== committedQueryRef.current
-                      ) {
-                        committedQueryRef.current = null;
-                        setPlace(null);
-                      }
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      if (phase === "qa" && !inputDisabled) {
-                        void handleQaSend(input);
-                      }
-                    }
-                  }}
-                  placeholder=""
-                />
-                {searchBusy && phase === "search" ? (
-                  <span style={{ fontSize: 11, color: "#999", marginLeft: 8 }}>
-                    {t("common_loading")}
-                  </span>
-                ) : null}
-              </div>
-              {showGenButton ? (
-                <button
-                  type="button"
-                  className="shrink-0 bg-transparent border-0 cursor-pointer self-center"
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 300,
-                    color: "#000",
-                    padding: "4px 8px",
-                    whiteSpace: "nowrap",
-                  }}
-                  onClick={() => void onGenerateClick()}
-                >
-                  {copy.genRiddles}
-                </button>
-              ) : null}
+          {showGenButton ? (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                marginTop: 8,
+              }}
+            >
               <button
                 type="button"
-                disabled={inputDisabled || phase !== "qa" || !input.trim()}
-                className="shrink-0 flex items-center justify-center bg-black text-white border-0 disabled:opacity-40"
+                className="bg-transparent border-0 cursor-pointer"
                 style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: "50%",
                   fontSize: 12,
                   fontWeight: 300,
+                  color: "#999",
+                  padding: "4px 0",
+                  touchAction: "manipulation",
                 }}
-                aria-label="Send"
-                onClick={() => onSendClick()}
+                onClick={() => void onGenerateClick()}
               >
-                ↑
+                {copy.genRiddles}
               </button>
             </div>
-          </div>
-        )}
-      </div>
+          ) : null}
+        </div>
+      )}
 
       <style jsx global>{`
         @keyframes onb-dot-pulse {

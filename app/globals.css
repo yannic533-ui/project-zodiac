@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 :root {
+  --vh: 1vh;
   --swiss-bg: #ffffff;
   --swiss-surface: #fafafa;
   --swiss-border: #e8e8e8;
@@ -15,6 +16,10 @@
 body {
   color: var(--swiss-text);
   background: var(--swiss-bg);
+}
+
+.onb-chat-body {
+  -webkit-overflow-scrolling: touch;
 }
 
 @layer utilities {
